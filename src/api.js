@@ -1,0 +1,83 @@
+import { API_BASE_URL } from './config';
+import { Storage } from './storage';
+
+async function request(path, body, method = 'POST') {
+  const token = await Storage.get('session_token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await res.json();
+
+  if (res.status === 401 && data.reason === 'session_expired') {
+    await Storage.remove('session_token');
+    throw { sessionExpired: true };
+  }
+
+  return data;
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+export const Auth = {
+  async login(email, passkey) {
+    const deviceToken = await Storage.get('device_token');
+    return request('/api/login', { action: 'login', email, passkey, deviceToken });
+  },
+  async verify2FA(userId, code, remember) {
+    const data = await request('/api/login', { action: 'verify2FA', userId, code, remember });
+    if (data.success && data.sessionToken) {
+      await Storage.set('session_token', data.sessionToken);
+      if (remember && data.newDeviceToken) await Storage.set('device_token', data.newDeviceToken);
+    }
+    return data;
+  },
+  async logout() {
+    await request('/api/login', { action: 'logout' });
+    await Storage.remove('session_token');
+  },
+};
+
+// ── MERCHANTS ─────────────────────────────────────────────────────────────────
+export const Merchants = {
+  list(query = '', page = 1, limit = 20) {
+    return request('/api/merchants', { action: 'list', query, page, limit });
+  },
+  get(id) {
+    return request('/api/merchants', { action: 'get', merchant_id: id });
+  },
+};
+
+// ── RETURNS ───────────────────────────────────────────────────────────────────
+export const Returns = {
+  list(query = '', offset = 0, limit = 20, filters = {}) {
+    return request('/api/returns', { action: 'list', query, offset, limit, ...filters });
+  },
+};
+
+// ── DEPLOYMENTS ───────────────────────────────────────────────────────────────
+export const Deployments = {
+  list(query = '', page = 1, limit = 20) {
+    return request('/api/deployments', { action: 'list', query, page, limit });
+  },
+};
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+export const Dashboard = {
+  async stats() {
+    const [merchants, returns, deployments] = await Promise.allSettled([
+      Merchants.list('', 1, 1),
+      Returns.list('', 0, 1),
+      Deployments.list('', 1, 1),
+    ]);
+    return {
+      merchants: merchants.value?.totalCount ?? merchants.value?.count ?? '—',
+      openReturns: returns.value?.metrics?.open ?? '—',
+      activeDeployments: deployments.value?.metrics?.active ?? '—',
+    };
+  },
+};
