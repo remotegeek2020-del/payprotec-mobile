@@ -3,8 +3,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
-import { enableScreens } from 'react-native-screens';
-enableScreens(false);
 
 import { COLORS } from '../config';
 import LoginScreen          from '../screens/LoginScreen';
