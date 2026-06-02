@@ -50,6 +50,15 @@ export const Merchants = {
   get(id) {
     return request('/api/merchants', { action: 'get', merchant_id: id });
   },
+  getNotes(merchant_id) {
+    return request('/api/merchants', { action: 'get_notes', merchant_id });
+  },
+  addNote(merchant_id, content) {
+    return request('/api/merchants', { action: 'add_note', merchant_id, content });
+  },
+  getMerchantTasks(merchant_id) {
+    return request('/api/merchants', { action: 'get_tasks', merchant_id });
+  },
 };
 
 // ── RETURNS ───────────────────────────────────────────────────────────────────
@@ -79,5 +88,37 @@ export const Dashboard = {
       openReturns: returns.value?.metrics?.open ?? '—',
       activeDeployments: deployments.value?.metrics?.active ?? '—',
     };
+  },
+};
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+export const Notifications = {
+  getCounts() {
+    return request('/api/notifications', { action: 'get_counts' });
+  },
+  markSeen(section) {
+    return request('/api/notifications', { action: 'mark_seen', section });
+  },
+};
+
+// ── TASKS ─────────────────────────────────────────────────────────────────────
+export const Tasks = {
+  list({ view = 'mine', status, page = 1, limit = 20 } = {}) {
+    return request('/api/tasks', { action: 'get_tasks', view, status, page, limit });
+  },
+  stats() {
+    return request('/api/tasks', { action: 'get_stats' });
+  },
+  create(payload) {
+    return request('/api/tasks', { action: 'create_task', ...payload });
+  },
+  update(id, fields) {
+    return request('/api/tasks', { action: 'update_task', id, ...fields });
+  },
+  getComments(task_id) {
+    return request('/api/tasks', { action: 'get_comments', task_id });
+  },
+  addComment(task_id, comment) {
+    return request('/api/tasks', { action: 'add_comment', task_id, comment });
   },
 };

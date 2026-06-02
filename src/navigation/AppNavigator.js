@@ -1,17 +1,19 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 
-import { COLORS } from '../config';
-import LoginScreen          from '../screens/LoginScreen';
-import TwoFAScreen          from '../screens/TwoFAScreen';
-import HomeScreen           from '../screens/HomeScreen';
-import MerchantsScreen      from '../screens/MerchantsScreen';
-import MerchantDetailScreen from '../screens/MerchantDetailScreen';
-import ReturnsScreen        from '../screens/ReturnsScreen';
-import DeploymentsScreen    from '../screens/DeploymentsScreen';
+import { COLORS }               from '../config';
+import { Notifications }        from '../api';
+import LoginScreen              from '../screens/LoginScreen';
+import TwoFAScreen              from '../screens/TwoFAScreen';
+import HomeScreen               from '../screens/HomeScreen';
+import MerchantsScreen          from '../screens/MerchantsScreen';
+import MerchantDetailScreen     from '../screens/MerchantDetailScreen';
+import ReturnsScreen            from '../screens/ReturnsScreen';
+import DeploymentsScreen        from '../screens/DeploymentsScreen';
+import TasksScreen              from '../screens/TasksScreen';
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -35,7 +37,7 @@ function MerchantsStack() {
   );
 }
 
-function MainTabs() {
+function MainTabs({ counts }) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -49,34 +51,79 @@ function MainTabs() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: 'Dashboard', tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} /> }}
+        options={{
+          title: 'Dashboard',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} />,
+        }}
       />
       <Tab.Screen
         name="Merchants"
         component={MerchantsStack}
-        options={{ headerShown: false, title: 'Merchants', tabBarIcon: ({ focused }) => <TabIcon emoji="🏪" focused={focused} /> }}
+        options={{
+          headerShown: false,
+          title: 'Merchants',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🏪" focused={focused} />,
+        }}
       />
       <Tab.Screen
         name="Returns"
         component={ReturnsScreen}
-        options={{ title: 'Returns / RMA', tabBarIcon: ({ focused }) => <TabIcon emoji="📦" focused={focused} /> }}
+        options={{
+          title: 'Returns / RMA',
+          tabBarBadge: counts.returns > 0 ? counts.returns : undefined,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📦" focused={focused} />,
+        }}
       />
       <Tab.Screen
         name="Deployments"
         component={DeploymentsScreen}
-        options={{ title: 'Deployments', tabBarIcon: ({ focused }) => <TabIcon emoji="🚚" focused={focused} /> }}
+        options={{
+          title: 'Deployments',
+          tabBarBadge: counts.deployments > 0 ? counts.deployments : undefined,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🚚" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Tasks"
+        component={TasksScreen}
+        options={{
+          title: 'Tasks',
+          tabBarBadge: counts.tasks > 0 ? counts.tasks : undefined,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="✅" focused={focused} />,
+        }}
       />
     </Tab.Navigator>
   );
 }
 
 export default function AppNavigator() {
+  const [counts, setCounts] = useState({});
+
+  useEffect(() => {
+    let active = true;
+
+    async function fetchCounts() {
+      try {
+        const data = await Notifications.getCounts();
+        if (active && data) setCounts(data);
+      } catch {}
+    }
+
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 60000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, cardStyle: { backgroundColor: COLORS.primaryDk } }}>
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="TwoFA" component={TwoFAScreen} />
-        <Stack.Screen name="Main"  component={MainTabs} />
+        <Stack.Screen name="Main"  component={() => <MainTabs counts={counts} />} />
       </Stack.Navigator>
     </NavigationContainer>
   );
