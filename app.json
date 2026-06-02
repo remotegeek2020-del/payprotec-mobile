@@ -3,6 +3,8 @@
     "name": "payprotec-mobile",
     "slug": "payprotec-mobile",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "newArchEnabled": false,
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
