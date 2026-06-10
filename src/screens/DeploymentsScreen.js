@@ -257,7 +257,7 @@ function CreateDeploymentModal({ visible, onClose, onCreated }) {
     setSearchingEquip(true);
     try {
       const data = await Deployments.getLookups(q);
-      setEquipResults(data.equipment || []);
+      setEquipResults(data.inventory || []);
     } catch {}
     setSearchingEquip(false);
   }

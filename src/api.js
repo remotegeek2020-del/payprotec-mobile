@@ -61,8 +61,11 @@ export const Auth = {
 // ── MERCHANTS ─────────────────────────────────────────────────────────────────
 export const Merchants = {
   // Response: { success, data[], count, metrics }
-  list(query = '', page = 1, limit = 20) {
-    return request('/api/merchants', { action: 'list', query, page, limit });
+  // Backend only filters when BOTH query and filterBy are sent; page is 0-based.
+  list(query = '', page = 1, limit = 20, filterBy = 'dba_name') {
+    const body = { action: 'list', page: Math.max(0, page - 1), limit };
+    if (query) { body.query = query; body.filterBy = filterBy; }
+    return request('/api/merchants', body);
   },
   // merchant_uuid is the merchant row UUID (m.id), NOT the MID.
   get(merchant_uuid) {
@@ -145,7 +148,7 @@ export const Deployments = {
     return request('/api/deployments', { action: 'create', payload });
   },
   // Search for merchants and stocked equipment. query: string
-  // Response: { success, merchants[], equipment[] }
+  // Response: { success, merchants[{id,dba_name,merchant_id}], inventory[{id,serial_number,terminal_type,status}] }
   getLookups(query = '') {
     return request('/api/deployments', { action: 'getLookups', query });
   },
