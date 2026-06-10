@@ -14,6 +14,7 @@ import MerchantDetailScreen     from '../screens/MerchantDetailScreen';
 import ReturnsScreen            from '../screens/ReturnsScreen';
 import DeploymentsScreen        from '../screens/DeploymentsScreen';
 import TasksScreen              from '../screens/TasksScreen';
+import TicketsScreen            from '../screens/TicketsScreen';
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -90,6 +91,15 @@ function MainTabs({ counts }) {
           title: 'Tasks',
           tabBarBadge: counts.tasks > 0 ? counts.tasks : undefined,
           tabBarIcon: ({ focused }) => <TabIcon emoji="✅" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Tickets"
+        component={TicketsScreen}
+        options={{
+          title: 'Tickets',
+          tabBarBadge: counts.tickets > 0 ? counts.tickets : undefined,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🎫" focused={focused} />,
         }}
       />
     </Tab.Navigator>

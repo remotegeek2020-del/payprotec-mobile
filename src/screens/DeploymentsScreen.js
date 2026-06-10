@@ -5,7 +5,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { COLORS } from '../config';
-import { Deployments } from '../api';
+import { Deployments, Merchants } from '../api';
 
 // Status values used by the backend
 const STATUSES = ['Open', 'In Transit', 'Deployed', 'Closed'];
@@ -217,6 +217,230 @@ function DeploymentDetailModal({ item, onClose, onChanged }) {
   );
 }
 
+// ── Create deployment modal ────────────────────────────────────────────────────
+
+function CreateDeploymentModal({ visible, onClose, onCreated }) {
+  const [merchantQuery, setMerchantQuery]   = useState('');
+  const [merchantResults, setMerchantResults] = useState([]);
+  const [merchant, setMerchant]             = useState(null);
+  const [equipQuery, setEquipQuery]         = useState('');
+  const [equipResults, setEquipResults]     = useState([]);
+  const [equipment, setEquipment]           = useState(null);
+  const [targetDate, setTargetDate]         = useState('');
+  const [tid, setTid]                       = useState('');
+  const [trackingId, setTrackingId]         = useState('');
+  const [notes, setNotes]                   = useState('');
+  const [searchingMerchant, setSearchingMerchant] = useState(false);
+  const [searchingEquip, setSearchingEquip] = useState(false);
+  const [saving, setSaving]                 = useState(false);
+
+  function reset() {
+    setMerchantQuery(''); setMerchantResults([]); setMerchant(null);
+    setEquipQuery(''); setEquipResults([]); setEquipment(null);
+    setTargetDate(''); setTid(''); setTrackingId(''); setNotes('');
+  }
+
+  async function searchMerchants() {
+    const q = merchantQuery.trim();
+    if (!q) return;
+    setSearchingMerchant(true);
+    try {
+      const data = await Merchants.list(q, 1, 8);
+      setMerchantResults(data.data || []);
+    } catch {}
+    setSearchingMerchant(false);
+  }
+
+  async function searchEquipment() {
+    const q = equipQuery.trim();
+    if (!q) return;
+    setSearchingEquip(true);
+    try {
+      const data = await Deployments.getLookups(q);
+      setEquipResults(data.equipment || []);
+    } catch {}
+    setSearchingEquip(false);
+  }
+
+  async function submit() {
+    if (!merchant)     { Alert.alert('Required', 'Select a merchant.'); return; }
+    if (!equipment)    { Alert.alert('Required', 'Select equipment to deploy.'); return; }
+    if (!targetDate.trim()) { Alert.alert('Required', 'Enter a target date.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate.trim())) {
+      Alert.alert('Invalid date', 'Use YYYY-MM-DD format for the target date.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        merchant_id: merchant.id,
+        equipment_id: equipment.id,
+        target_date: targetDate.trim(),
+      };
+      if (tid.trim())       payload.tid         = tid.trim();
+      if (trackingId.trim()) payload.tracking_id = trackingId.trim();
+      if (notes.trim())     payload.notes        = notes.trim();
+
+      const res = await Deployments.create(payload);
+      if (res.success) {
+        reset();
+        onCreated();
+      } else {
+        Alert.alert('Error', res.message || 'Could not create deployment.');
+      }
+    } catch {
+      Alert.alert('Error', 'Could not create deployment. Check your connection.');
+    }
+    setSaving(false);
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => { reset(); onClose(); }}>
+      <View style={s.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
+          <View style={s.modalCard}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>New Deployment</Text>
+              <TouchableOpacity onPress={() => { reset(); onClose(); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={s.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
+              {/* Merchant */}
+              <Text style={s.sectionLabel}>Merchant *</Text>
+              {merchant ? (
+                <View style={s.selectedRow}>
+                  <Text style={s.selectedText} numberOfLines={1}>{merchant.dba_name} ({merchant.merchant_id})</Text>
+                  <TouchableOpacity onPress={() => setMerchant(null)}>
+                    <Text style={s.selectedClear}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  <View style={s.searchRow}>
+                    <TextInput
+                      style={[s.input, { flex: 1, marginBottom: 0 }]}
+                      placeholder="Search merchants…"
+                      placeholderTextColor={COLORS.light}
+                      value={merchantQuery}
+                      onChangeText={setMerchantQuery}
+                      onSubmitEditing={searchMerchants}
+                      returnKeyType="search"
+                    />
+                    <TouchableOpacity style={s.searchBtn} onPress={searchMerchants}>
+                      {searchingMerchant
+                        ? <ActivityIndicator color="#fff" size="small" />
+                        : <Text style={s.searchBtnText}>Search</Text>}
+                    </TouchableOpacity>
+                  </View>
+                  {merchantResults.map(m => (
+                    <TouchableOpacity key={m.id} style={s.resultRow} onPress={() => { setMerchant(m); setMerchantResults([]); }}>
+                      <Text style={s.resultName} numberOfLines={1}>{m.dba_name}</Text>
+                      <Text style={s.resultMid}>{m.merchant_id}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {/* Equipment */}
+              <Text style={s.sectionLabel}>Equipment *</Text>
+              {equipment ? (
+                <View style={s.selectedRow}>
+                  <Text style={s.selectedText} numberOfLines={1}>{equipment.serial_number} {equipment.terminal_type ? `(${equipment.terminal_type})` : ''}</Text>
+                  <TouchableOpacity onPress={() => setEquipment(null)}>
+                    <Text style={s.selectedClear}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  <View style={s.searchRow}>
+                    <TextInput
+                      style={[s.input, { flex: 1, marginBottom: 0 }]}
+                      placeholder="Search by serial or type…"
+                      placeholderTextColor={COLORS.light}
+                      value={equipQuery}
+                      onChangeText={setEquipQuery}
+                      onSubmitEditing={searchEquipment}
+                      returnKeyType="search"
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity style={s.searchBtn} onPress={searchEquipment}>
+                      {searchingEquip
+                        ? <ActivityIndicator color="#fff" size="small" />
+                        : <Text style={s.searchBtnText}>Search</Text>}
+                    </TouchableOpacity>
+                  </View>
+                  {equipResults.map(eq => (
+                    <TouchableOpacity key={eq.id} style={s.resultRow} onPress={() => { setEquipment(eq); setEquipResults([]); }}>
+                      <Text style={s.resultName} numberOfLines={1}>{eq.serial_number}</Text>
+                      <Text style={s.resultMid}>{eq.terminal_type || eq.status || ''}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {/* Target date */}
+              <Text style={s.sectionLabel}>Target Date * (YYYY-MM-DD)</Text>
+              <TextInput
+                style={s.input}
+                placeholder="2026-06-30"
+                placeholderTextColor={COLORS.light}
+                value={targetDate}
+                onChangeText={setTargetDate}
+                autoCapitalize="none"
+              />
+
+              {/* TID (optional) */}
+              <Text style={s.sectionLabel}>TID (optional)</Text>
+              <TextInput
+                style={s.input}
+                placeholder="Terminal ID"
+                placeholderTextColor={COLORS.light}
+                value={tid}
+                onChangeText={setTid}
+                autoCapitalize="characters"
+              />
+
+              {/* Tracking ID (optional) */}
+              <Text style={s.sectionLabel}>Tracking ID (optional)</Text>
+              <TextInput
+                style={s.input}
+                placeholder="Shipment tracking number"
+                placeholderTextColor={COLORS.light}
+                value={trackingId}
+                onChangeText={setTrackingId}
+                autoCapitalize="characters"
+              />
+
+              {/* Notes (optional) */}
+              <Text style={s.sectionLabel}>Notes (optional)</Text>
+              <TextInput
+                style={[s.input, s.inputMultiline]}
+                placeholder="Any notes for this deployment"
+                placeholderTextColor={COLORS.light}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+              />
+
+              <TouchableOpacity
+                style={[s.primaryBtn, saving && { opacity: 0.6 }]}
+                onPress={submit}
+                disabled={saving}
+              >
+                {saving
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={s.primaryBtnText}>Create Deployment</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
 // ── Screen ─────────────────────────────────────────────────────────────────────
 
 export default function DeploymentsScreen() {
@@ -228,6 +452,7 @@ export default function DeploymentsScreen() {
   const [page, setPage]           = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [selected, setSelected]   = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   async function load(q = query, pg = 1, append = false) {
     setLoading(true);
@@ -296,6 +521,17 @@ export default function DeploymentsScreen() {
       />
 
       <DeploymentDetailModal item={selected} onClose={() => setSelected(null)} onChanged={handleChanged} />
+
+      {/* FAB */}
+      <TouchableOpacity style={s.fab} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
+        <Text style={s.fabText}>＋</Text>
+      </TouchableOpacity>
+
+      <CreateDeploymentModal
+        visible={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => { setShowCreate(false); load(query, 1, false); }}
+      />
     </View>
   );
 }
@@ -309,7 +545,7 @@ const s = StyleSheet.create({
   searchBar:   { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.card, margin: 14, marginTop: 10, borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: COLORS.border },
   searchIcon:  { fontSize: 16, marginRight: 6 },
   searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: COLORS.text },
-  list:        { paddingHorizontal: 14, paddingBottom: 30 },
+  list:        { paddingHorizontal: 14, paddingBottom: 90 },
   card:        { backgroundColor: COLORS.card, borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   cardTop:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   depId:       { fontSize: 13, fontWeight: '800', color: COLORS.primaryDk, fontFamily: 'monospace' },
@@ -345,4 +581,19 @@ const s = StyleSheet.create({
   inputMultiline: { minHeight: 70, textAlignVertical: 'top' },
   primaryBtn:  { backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
   primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+
+  // FAB
+  fab:         { position: 'absolute', right: 20, bottom: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
+  fabText:     { color: '#fff', fontSize: 28, fontWeight: '700', lineHeight: 32 },
+
+  // Create modal extra styles
+  searchRow:   { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  searchBtn:   { backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+  searchBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  resultRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  resultName:  { flex: 1, fontSize: 13, fontWeight: '600', color: COLORS.text },
+  resultMid:   { fontSize: 11, color: COLORS.muted, fontFamily: 'monospace', marginLeft: 8 },
+  selectedRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 10, padding: 12 },
+  selectedText:{ flex: 1, fontSize: 13, fontWeight: '700', color: COLORS.primary },
+  selectedClear: { fontSize: 12, fontWeight: '700', color: COLORS.danger, marginLeft: 10 },
 });

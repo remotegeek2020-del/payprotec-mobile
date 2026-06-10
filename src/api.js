@@ -82,6 +82,14 @@ export const Merchants = {
   getMerchantTasks(merchant_uuid) {
     return request('/api/merchants', { action: 'get_tasks', merchant_uuid });
   },
+  // Required: merchant_id (string), dba_name (string).
+  // Optional: email, merchant_phone, merchant_primary_contact,
+  //           merchant_address, merchant_city, merchant_state, merchant_zip,
+  //           merchant_country, agent_id, account_status, source
+  // Response: { success, merchant_id }
+  create(payload) {
+    return request('/api/merchants', { action: 'create', ...payload });
+  },
 };
 
 // ── RETURNS ───────────────────────────────────────────────────────────────────
@@ -97,6 +105,19 @@ export const Returns = {
   },
   remove(return_uuid) {
     return request('/api/returns', { action: 'delete', return_uuid });
+  },
+  // Add equipment items to an existing open RMA.
+  // Required: return_uuid (string), equipment_ids (array of IDs)
+  // Response: { success, added, message }
+  addItems(return_uuid, equipment_ids) {
+    return request('/api/returns', { action: 'add_items', return_uuid, equipment_ids });
+  },
+  // Retrieve unprocessed deployment items eligible to be added to a bulk RMA.
+  // Required: (none beyond auth) — optional: merchant_id to scope results
+  getAddableItems(merchant_id) {
+    const body = { action: 'get_addable_items' };
+    if (merchant_id) body.merchant_id = merchant_id;
+    return request('/api/returns', body);
   },
 };
 
@@ -116,20 +137,34 @@ export const Deployments = {
   checkRma(deployment_id) {
     return request('/api/deployments', { action: 'check_rma', deployment_id });
   },
+  // Create a single-unit deployment.
+  // Required: payload.merchant_id (UUID), payload.equipment_id (UUID), payload.target_date (ISO date string)
+  // Optional: payload.tid, payload.tracking_id, payload.notes, payload.purchase_type
+  // Response: { success, data[] } on 200; { success: false, message } on 409/400
+  create(payload) {
+    return request('/api/deployments', { action: 'create', payload });
+  },
+  // Search for merchants and stocked equipment. query: string
+  // Response: { success, merchants[], equipment[] }
+  getLookups(query = '') {
+    return request('/api/deployments', { action: 'getLookups', query });
+  },
 };
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 export const Dashboard = {
   async stats() {
-    const [merchants, returns, deployments] = await Promise.allSettled([
+    const [merchants, returns, deployments, taskStats] = await Promise.allSettled([
       Merchants.list('', 1, 1),
       Returns.list('', 0, 1),
       Deployments.list('', 1, 1),
+      Tasks.stats(),
     ]);
     return {
       merchants: merchants.value?.count ?? '—',
       openReturns: returns.value?.metrics?.open ?? '—',
       activeDeployments: deployments.value?.metrics?.active ?? '—',
+      openTasks: taskStats.value?.all ?? '—',
     };
   },
 };
@@ -147,6 +182,84 @@ export const Notifications = {
     const userid = await Storage.get('user_id');
     if (!userid) return { success: false };
     return request('/api/notifications', { action: 'mark_seen', userid, section });
+  },
+};
+
+// ── TICKETS ───────────────────────────────────────────────────────────────────
+export const Tickets = {
+  // List tickets for the authenticated partner.
+  // Optional: merchant_uuid to filter by merchant.
+  // Response: { success, data: [{ id, ticket_number, type, category, subject, status, priority, created_at, updated_at }] }
+  list(merchant_uuid) {
+    const body = { action: 'list_for_partner' };
+    if (merchant_uuid) body.merchant_uuid = merchant_uuid;
+    return request('/api/tickets', body);
+  },
+  // Create a new ticket.
+  // Required: type (string), subject (string)
+  // Optional: merchant_id, category, description, priority, deployment_id, equipment_serial
+  // Response: { success, ticket: { id, ticket_number, status, created_at } }
+  create(payload) {
+    return request('/api/tickets', { action: 'create', ...payload });
+  },
+  // Get full ticket details.
+  // Required: ticket_id
+  // Response: { success, ticket: { full ticket data } }
+  get(ticket_id) {
+    return request('/api/tickets', { action: 'get_detail', ticket_id });
+  },
+  // Get comments on a ticket.
+  // Required: ticket_id
+  // Response: { success, comments: [] }
+  getComments(ticket_id) {
+    return request('/api/tickets', { action: 'get_comments', ticket_id });
+  },
+  // Add a comment to a ticket.
+  // Required: ticket_id, body
+  // Response: { success, comment: { id, ticket_id, author_type, author_name, body, created_at } }
+  addComment(ticket_id, body) {
+    return request('/api/tickets', { action: 'add_comment', ticket_id, body });
+  },
+  // Get total unread count for authenticated partner.
+  // Response: { success, total }
+  getUnreadTotal() {
+    return request('/api/tickets', { action: 'get_unread_total' });
+  },
+};
+
+// ── EQUIPMENTS ────────────────────────────────────────────────────────────────
+export const Equipments = {
+  // List equipment with optional search/filters.
+  // Optional: query, filterLocation, filterStatus, limit (default 50), page (default 0)
+  // Response: { success, data[], count, metrics: { total, inOffice, inRepair, deployed, retired, alerts } }
+  list({ query = '', filterLocation, filterStatus, limit = 50, page = 0 } = {}) {
+    const body = { action: 'list', query, limit, page };
+    if (filterLocation) body.filterLocation = filterLocation;
+    if (filterStatus)   body.filterStatus   = filterStatus;
+    return request('/api/equipments', body);
+  },
+  // Create a single equipment unit.
+  // Required: payload.serial_number
+  // Optional: all other equipment fields (terminal_type, condition, received_date, current_location, notes)
+  // Response: { success, data: Equipment }
+  create(payload) {
+    return request('/api/equipments', { action: 'create', payload });
+  },
+  // Get all unique serial numbers.
+  // Response: { success, serials: string[] }
+  getAllSerials() {
+    return request('/api/equipments', { action: 'getAllSerials' });
+  },
+  // Get equipment activity/history logs.
+  // Required: equipment_id
+  // Response: { success, data: EquipmentLog[] }
+  getHistory(equipment_id) {
+    return request('/api/equipments', { action: 'getHistory', equipment_id });
+  },
+  // List available terminal types.
+  // Response: { success, terminal_types: [{ id, name, sort_order, is_active }] }
+  listTerminalTypes() {
+    return request('/api/equipments', { action: 'list_terminal_types' });
   },
 };
 

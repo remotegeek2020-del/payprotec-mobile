@@ -25,8 +25,15 @@ function QuickLink({ icon, label, onPress }) {
   );
 }
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export default function HomeScreen({ navigation }) {
-  const [stats, setStats]         = useState({ merchants: '—', openReturns: '—', activeDeployments: '—' });
+  const [stats, setStats]         = useState({ merchants: '—', openReturns: '—', activeDeployments: '—', openTasks: '—' });
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -57,7 +64,7 @@ export default function HomeScreen({ navigation }) {
       {/* Header */}
       <View style={s.header}>
         <View>
-          <Text style={s.greeting}>Good day 👋</Text>
+          <Text style={s.greeting}>{getGreeting()} 👋</Text>
           <Text style={s.headerSub}>Merchant Management Console</Text>
         </View>
         <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
@@ -69,10 +76,11 @@ export default function HomeScreen({ navigation }) {
       <Text style={s.sectionTitle}>Overview</Text>
       {loading
         ? <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />
-        : <View style={s.statsRow}>
-            <StatCard label="Merchants"         value={stats.merchants}          color={COLORS.primary} />
-            <StatCard label="Open RMAs"         value={stats.openReturns}        color={COLORS.warning} />
-            <StatCard label="Active Deployments" value={stats.activeDeployments} color={COLORS.success} />
+        : <View style={s.statsGrid}>
+            <StatCard label="Merchants"          value={stats.merchants}          color={COLORS.primary} />
+            <StatCard label="Open RMAs"          value={stats.openReturns}        color={COLORS.warning} />
+            <StatCard label="Active Deployments" value={stats.activeDeployments}  color={COLORS.success} />
+            <StatCard label="Open Tasks"         value={stats.openTasks}          color={COLORS.accent} />
           </View>
       }
 
@@ -82,6 +90,8 @@ export default function HomeScreen({ navigation }) {
         <QuickLink icon="🏪" label="Merchants"   onPress={() => navigation.navigate('Merchants')} />
         <QuickLink icon="📦" label="Returns"     onPress={() => navigation.navigate('Returns')} />
         <QuickLink icon="🚚" label="Deployments" onPress={() => navigation.navigate('Deployments')} />
+        <QuickLink icon="✅" label="Tasks"       onPress={() => navigation.navigate('Tasks')} />
+        <QuickLink icon="🎫" label="Tickets"     onPress={() => navigation.navigate('Tickets')} />
       </View>
     </ScrollView>
   );
@@ -96,8 +106,8 @@ const s = StyleSheet.create({
   logoutBtn:   { backgroundColor: '#fee2e2', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
   logoutText:  { color: COLORS.danger, fontSize: 12, fontWeight: '700' },
   sectionTitle:{ fontSize: 12, fontWeight: '800', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
-  statsRow:    { flexDirection: 'row', gap: 10, marginBottom: 28 },
-  statCard:    { flex: 1, backgroundColor: COLORS.card, borderRadius: 12, padding: 16, borderTopWidth: 3, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  statsGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 28 },
+  statCard:    { flexBasis: '46%', flexGrow: 1, backgroundColor: COLORS.card, borderRadius: 12, padding: 16, borderTopWidth: 3, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   statNum:     { fontSize: 26, fontWeight: '900', marginBottom: 4 },
   statLabel:   { fontSize: 11, color: COLORS.muted, fontWeight: '600' },
   quickGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
