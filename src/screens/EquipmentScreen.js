@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal, ScrollView,
+  ActivityIndicator, RefreshControl, Modal, ScrollView, Alert,
 } from 'react-native';
 import { COLORS } from '../config';
 import { Equipments } from '../api';
+import DatePickerModal from '../components/DatePickerModal';
 
 // Backend status values: stocked | deployed | repairing | decommissioned
 const STATUS_COLORS = {
@@ -62,13 +63,30 @@ function DetailRow({ label, value }) {
   );
 }
 
-function EquipmentDetailModal({ item, onClose }) {
+function EquipmentDetailModal({ item, onClose, onUpdated }) {
   const [history, setHistory]               = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [editing, setEditing]               = useState(false);
+  const [saving, setSaving]                 = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Edit form state
+  const [serial, setSerial]       = useState('');
+  const [termType, setTermType]   = useState('');
+  const [condition, setCondition] = useState('');
+  const [location, setLocation]   = useState('');
+  const [notes, setNotes]         = useState('');
+  const [recDate, setRecDate]     = useState('');
 
   useEffect(() => {
-    setHistory([]);
+    setHistory([]); setEditing(false);
     if (!item?.id) return;
+    setSerial(item.serial_number || '');
+    setTermType(item.terminal_type || '');
+    setCondition(item.condition || '');
+    setLocation(item.current_location || '');
+    setNotes(item.notes || '');
+    setRecDate(item.received_date ? item.received_date.split('T')[0] : '');
     let active = true;
     (async () => {
       setLoadingHistory(true);
@@ -81,6 +99,29 @@ function EquipmentDetailModal({ item, onClose }) {
     return () => { active = false; };
   }, [item?.id]);
 
+  async function saveEdit() {
+    setSaving(true);
+    try {
+      const payload = {};
+      if (serial)    payload.serial_number   = serial.trim();
+      if (termType)  payload.terminal_type   = termType.trim();
+      if (condition) payload.condition       = condition.trim();
+      if (location)  payload.current_location = location.trim();
+      if (notes)     payload.notes           = notes.trim();
+      if (recDate)   payload.received_date   = recDate;
+      const res = await Equipments.update(item.id, payload);
+      if (res.success !== false) {
+        onUpdated && onUpdated();
+        setEditing(false);
+      } else {
+        Alert.alert('Error', res.message || 'Update failed.');
+      }
+    } catch {
+      Alert.alert('Error', 'Could not update equipment.');
+    }
+    setSaving(false);
+  }
+
   if (!item) return null;
 
   return (
@@ -89,19 +130,65 @@ function EquipmentDetailModal({ item, onClose }) {
         <View style={s.modalCard}>
           <View style={s.modalHeader}>
             <Text style={s.modalTitle}>{item.serial_number || 'Equipment'}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={s.modalClose}>✕</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity onPress={() => setEditing(e => !e)}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.primary }}>
+                  {editing ? 'Cancel' : 'Edit'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={s.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <ScrollView contentContainerStyle={{ paddingBottom: 12 }}>
-            <DetailRow label="Status"        value={item.status} />
-            <DetailRow label="Terminal Type" value={item.terminal_type} />
-            <DetailRow label="Location"      value={item.current_location} />
-            <DetailRow label="Condition"     value={item.condition} />
-            <DetailRow label="Merchant"      value={item.merchants?.dba_name} />
-            <DetailRow label="Received"      value={formatDate(item.received_date)} />
-            <DetailRow label="Notes"         value={item.notes} />
+          <ScrollView contentContainerStyle={{ paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
+            {editing ? (
+              <View>
+                <Text style={s.sectionLabel}>Serial Number</Text>
+                <TextInput style={s.editInput} value={serial} onChangeText={setSerial} placeholderTextColor={COLORS.light} placeholder="Serial number" />
+                <Text style={s.sectionLabel}>Terminal Type</Text>
+                <TextInput style={s.editInput} value={termType} onChangeText={setTermType} placeholderTextColor={COLORS.light} placeholder="Terminal type" />
+                <Text style={s.sectionLabel}>Condition</Text>
+                <TextInput style={s.editInput} value={condition} onChangeText={setCondition} placeholderTextColor={COLORS.light} placeholder="Condition" />
+                <Text style={s.sectionLabel}>Location</Text>
+                <TextInput style={s.editInput} value={location} onChangeText={setLocation} placeholderTextColor={COLORS.light} placeholder="Current location" />
+                <Text style={s.sectionLabel}>Notes</Text>
+                <TextInput style={[s.editInput, { minHeight: 60, textAlignVertical: 'top' }]} value={notes} onChangeText={setNotes} placeholderTextColor={COLORS.light} placeholder="Notes" multiline />
+                <Text style={s.sectionLabel}>Received Date</Text>
+                <TouchableOpacity style={s.dateField} onPress={() => setShowDatePicker(true)}>
+                  <Text style={recDate ? s.dateFieldText : s.dateFieldPlaceholder}>{recDate || 'Select a date…'}</Text>
+                  <Text style={s.dateFieldIcon}>📅</Text>
+                </TouchableOpacity>
+                <DatePickerModal
+                  visible={showDatePicker}
+                  value={recDate}
+                  onSelect={d => { setRecDate(d); setShowDatePicker(false); }}
+                  onClose={() => setShowDatePicker(false)}
+                  title="Received Date"
+                />
+                <TouchableOpacity
+                  style={[s.saveBtn, saving && s.saveBtnDisabled]}
+                  onPress={saveEdit}
+                  disabled={saving}
+                >
+                  {saving
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={s.saveBtnText}>Save Changes</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <DetailRow label="Status"        value={item.status} />
+                <DetailRow label="Terminal Type" value={item.terminal_type} />
+                <DetailRow label="Location"      value={item.current_location} />
+                <DetailRow label="Condition"     value={item.condition} />
+                <DetailRow label="Merchant"      value={item.merchants?.dba_name} />
+                <DetailRow label="Received"      value={formatDate(item.received_date)} />
+                <DetailRow label="Notes"         value={item.notes} />
+              </>
+            )}
 
             <Text style={s.sectionLabel}>History</Text>
             {loadingHistory ? (
@@ -233,7 +320,11 @@ export default function EquipmentScreen() {
         ListEmptyComponent={!loading ? <Text style={s.empty}>No equipment found</Text> : null}
       />
 
-      <EquipmentDetailModal item={selected} onClose={() => setSelected(null)} />
+      <EquipmentDetailModal
+        item={selected}
+        onClose={() => setSelected(null)}
+        onUpdated={() => load(query, statusFilter, 0, false)}
+      />
     </View>
   );
 }
@@ -281,4 +372,12 @@ const s = StyleSheet.create({
   logDate:     { fontSize: 10, color: COLORS.light },
   logMove:     { fontSize: 11, color: COLORS.primary, marginTop: 3 },
   logNotes:    { fontSize: 11, color: COLORS.muted, marginTop: 3 },
+  editInput:       { borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 11, fontSize: 14, color: COLORS.text, marginBottom: 12, backgroundColor: '#fff' },
+  saveBtn:         { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4, marginBottom: 16 },
+  saveBtnDisabled: { backgroundColor: COLORS.light },
+  saveBtnText:     { color: '#fff', fontSize: 14, fontWeight: '800' },
+  dateField:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, marginBottom: 14, backgroundColor: '#fff' },
+  dateFieldText:      { fontSize: 14, color: COLORS.text, fontWeight: '500' },
+  dateFieldPlaceholder: { fontSize: 14, color: COLORS.light },
+  dateFieldIcon:      { fontSize: 16 },
 });

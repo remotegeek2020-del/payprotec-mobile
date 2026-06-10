@@ -18,6 +18,9 @@ import TicketsScreen            from '../screens/TicketsScreen';
 import EquipmentScreen          from '../screens/EquipmentScreen';
 import RepairQueueScreen        from '../screens/RepairQueueScreen';
 import EquipmentROIScreen       from '../screens/EquipmentROIScreen';
+import PartnersScreen           from '../screens/PartnersScreen';
+import CommunityScreen          from '../screens/CommunityScreen';
+import MessagesScreen           from '../screens/MessagesScreen';
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -39,6 +42,9 @@ function HomeStack() {
       <Stack.Screen name="Equipment"    component={EquipmentScreen}    options={{ title: 'Inventory' }} />
       <Stack.Screen name="RepairQueue"  component={RepairQueueScreen}  options={{ title: 'Repair Queue' }} />
       <Stack.Screen name="EquipmentROI" component={EquipmentROIScreen} options={{ title: 'Equipment ROI' }} />
+      <Stack.Screen name="Partners"     component={PartnersScreen}     options={{ title: 'Partners' }} />
+      <Stack.Screen name="Community"    component={CommunityScreen}    options={{ title: 'Community' }} />
+      <Stack.Screen name="Messages"     component={MessagesScreen}     options={{ title: 'Messages' }} />
     </Stack.Navigator>
   );
 }

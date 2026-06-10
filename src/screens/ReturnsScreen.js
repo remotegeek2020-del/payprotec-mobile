@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../config';
 import { Returns, Merchants } from '../api';
+import DatePickerModal from '../components/DatePickerModal';
 
 const STATUS_COLORS = {
   open:   { bg: '#fef3c7', text: '#d97706' },
@@ -79,6 +80,7 @@ function ReturnDetailModal({ item, onClose, onChanged }) {
   const [condition, setCondition]     = useState(null);
   const [destination, setDestination] = useState('');
   const [receivedDate, setReceivedDate] = useState(todayStr());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving]           = useState(false);
 
   useEffect(() => {
@@ -95,10 +97,6 @@ function ReturnDetailModal({ item, onClose, onChanged }) {
 
   async function submitComplete() {
     if (!condition) { Alert.alert('Required', 'Select the equipment condition.'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(receivedDate.trim())) {
-      Alert.alert('Invalid date', 'Use YYYY-MM-DD format for the received date.');
-      return;
-    }
     setSaving(true);
     try {
       const res = await Returns.complete({
@@ -210,14 +208,19 @@ function ReturnDetailModal({ item, onClose, onChanged }) {
                     onChangeText={setDestination}
                   />
 
-                  <Text style={s.sectionLabel}>Received Date (YYYY-MM-DD)</Text>
-                  <TextInput
-                    style={s.input}
-                    placeholder={todayStr()}
-                    placeholderTextColor={COLORS.light}
+                  <Text style={s.sectionLabel}>Received Date</Text>
+                  <TouchableOpacity style={s.dateField} onPress={() => setShowDatePicker(true)}>
+                    <Text style={receivedDate ? s.dateFieldText : s.dateFieldPlaceholder}>
+                      {receivedDate || 'Select a date…'}
+                    </Text>
+                    <Text style={s.dateFieldIcon}>📅</Text>
+                  </TouchableOpacity>
+                  <DatePickerModal
+                    visible={showDatePicker}
                     value={receivedDate}
-                    onChangeText={setReceivedDate}
-                    autoCapitalize="none"
+                    onSelect={d => { setReceivedDate(d); setShowDatePicker(false); }}
+                    onClose={() => setShowDatePicker(false)}
+                    title="Received Date"
                   />
 
                   <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -611,4 +614,8 @@ const s = StyleSheet.create({
   selectedRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 10, padding: 12 },
   selectedText:{ flex: 1, fontSize: 13, fontWeight: '700', color: COLORS.primary },
   selectedClear: { fontSize: 12, fontWeight: '700', color: COLORS.danger, marginLeft: 10 },
+  dateField:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, marginBottom: 14, backgroundColor: '#fff' },
+  dateFieldText:      { fontSize: 14, color: COLORS.text, fontWeight: '500' },
+  dateFieldPlaceholder: { fontSize: 14, color: COLORS.light },
+  dateFieldIcon:      { fontSize: 16 },
 });

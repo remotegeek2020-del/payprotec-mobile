@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../config';
 import { Deployments, Merchants } from '../api';
+import DatePickerModal from '../components/DatePickerModal';
 
 // Status values used by the backend
 const STATUSES = ['Open', 'In Transit', 'Deployed', 'Closed'];
@@ -227,6 +228,7 @@ function CreateDeploymentModal({ visible, onClose, onCreated }) {
   const [equipResults, setEquipResults]     = useState([]);
   const [equipment, setEquipment]           = useState(null);
   const [targetDate, setTargetDate]         = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [tid, setTid]                       = useState('');
   const [trackingId, setTrackingId]         = useState('');
   const [notes, setNotes]                   = useState('');
@@ -266,10 +268,6 @@ function CreateDeploymentModal({ visible, onClose, onCreated }) {
     if (!merchant)     { Alert.alert('Required', 'Select a merchant.'); return; }
     if (!equipment)    { Alert.alert('Required', 'Select equipment to deploy.'); return; }
     if (!targetDate.trim()) { Alert.alert('Required', 'Enter a target date.'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate.trim())) {
-      Alert.alert('Invalid date', 'Use YYYY-MM-DD format for the target date.');
-      return;
-    }
     setSaving(true);
     try {
       const payload = {
@@ -381,14 +379,19 @@ function CreateDeploymentModal({ visible, onClose, onCreated }) {
               )}
 
               {/* Target date */}
-              <Text style={s.sectionLabel}>Target Date * (YYYY-MM-DD)</Text>
-              <TextInput
-                style={s.input}
-                placeholder="2026-06-30"
-                placeholderTextColor={COLORS.light}
+              <Text style={s.sectionLabel}>Target Date *</Text>
+              <TouchableOpacity style={s.dateField} onPress={() => setShowDatePicker(true)}>
+                <Text style={targetDate ? s.dateFieldText : s.dateFieldPlaceholder}>
+                  {targetDate || 'Select a date…'}
+                </Text>
+                <Text style={s.dateFieldIcon}>📅</Text>
+              </TouchableOpacity>
+              <DatePickerModal
+                visible={showDatePicker}
                 value={targetDate}
-                onChangeText={setTargetDate}
-                autoCapitalize="none"
+                onSelect={d => { setTargetDate(d); setShowDatePicker(false); }}
+                onClose={() => setShowDatePicker(false)}
+                title="Target Date"
               />
 
               {/* TID (optional) */}
@@ -596,4 +599,8 @@ const s = StyleSheet.create({
   selectedRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 10, padding: 12 },
   selectedText:{ flex: 1, fontSize: 13, fontWeight: '700', color: COLORS.primary },
   selectedClear: { fontSize: 12, fontWeight: '700', color: COLORS.danger, marginLeft: 10 },
+  dateField:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, marginBottom: 14, backgroundColor: '#fff' },
+  dateFieldText:      { fontSize: 14, color: COLORS.text, fontWeight: '500' },
+  dateFieldPlaceholder: { fontSize: 14, color: COLORS.light },
+  dateFieldIcon:      { fontSize: 16 },
 });

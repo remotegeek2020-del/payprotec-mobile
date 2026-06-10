@@ -22,12 +22,40 @@ async function request(path, body, method = 'POST') {
   return data;
 }
 
-// Persist the logged-in user's identity (needed by notifications + notes).
+// Persist the logged-in user's identity + permission flags.
 async function storeUser(user) {
   if (!user) return;
-  if (user.userid != null) await Storage.set('user_id', user.userid);
+  if (user.userid != null) await Storage.set('user_id', String(user.userid));
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
   if (name) await Storage.set('user_name', name);
+  if (user.role)  await Storage.set('user_role', user.role);
+  // Granular permission flags — stored as '1' or '0'
+  const flags = [
+    'access_merchants','access_deployments','access_returns','access_inventory',
+    'access_partners','access_admin_dashboard','access_sending_reports',
+    'access_jarvis','can_delete_tickets',
+  ];
+  for (const f of flags) {
+    await Storage.set(f, user[f] ? '1' : '0');
+  }
+}
+
+// Retrieve the permission object for RBAC checks in screens.
+export async function getUserPerms() {
+  const role  = (await Storage.get('user_role')) || '';
+  const isAdmin = role === 'admin' || role === 'super_admin' || role === 'operations admin';
+  async function flag(key) { return (await Storage.get(key)) === '1'; }
+  return {
+    role,
+    isAdmin,
+    merchants:    isAdmin || await flag('access_merchants'),
+    deployments:  isAdmin || await flag('access_deployments'),
+    returns:      isAdmin || await flag('access_returns'),
+    inventory:    isAdmin || await flag('access_inventory'),
+    partners:     isAdmin || await flag('access_partners'),
+    adminDash:    isAdmin || await flag('access_admin_dashboard'),
+    sendReports:  isAdmin || await flag('access_sending_reports'),
+  };
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -52,9 +80,12 @@ export const Auth = {
   },
   async logout() {
     try { await request('/api/login', { action: 'logout' }); } catch {}
-    await Storage.remove('session_token');
-    await Storage.remove('user_id');
-    await Storage.remove('user_name');
+    for (const k of ['session_token','user_id','user_name','user_role',
+      'access_merchants','access_deployments','access_returns','access_inventory',
+      'access_partners','access_admin_dashboard','access_sending_reports',
+      'access_jarvis','can_delete_tickets']) {
+      await Storage.remove(k);
+    }
   },
 };
 
@@ -337,5 +368,94 @@ export const Tasks = {
   // Response: { success, data: [{ id, full_name }] }
   getStaff() {
     return request('/api/tasks', { action: 'get_staff' });
+  },
+};
+
+// ── PARTNERS ──────────────────────────────────────────────────────────────────
+export const Partners = {
+  // Leaderboard of all agents.
+  // Response: { success, data: [{person_id, name, merchant_count, volume_30_day, volume_90_day, rank, tier, growth_pct}],
+  //             needs_attention: [], total }
+  getLeaderboard() {
+    return request('/api/partners', { action: 'get_leaderboard' });
+  },
+  // Scorecard for a specific agent.
+  // Required: person_id. Optional: from_date, to_date.
+  // Response: { success, scorecard: { totals, companies, top_merchants } }
+  getScorecard(person_id, from_date, to_date) {
+    const body = { action: 'get_scorecard', person_id };
+    if (from_date) body.from_date = from_date;
+    if (to_date)   body.to_date   = to_date;
+    return request('/api/partners', body);
+  },
+  // List of all agents (for admin transfers).
+  // Response: { success, data: [{agent_id, person_name, person_email, company_name, identifier_count}] }
+  getAllAgents() {
+    return request('/api/partners', { action: 'get_all_agents_for_transfer' });
+  },
+};
+
+// ── COMMUNITY ─────────────────────────────────────────────────────────────────
+export const Community = {
+  // Response: { success, data: channels[] }
+  getChannels() {
+    return request('/api/community', { action: 'get_channels' });
+  },
+  // Response: { success, data: posts[], count, has_more }
+  getFeed({ channel_id, page = 0, limit = 20 } = {}) {
+    const body = { action: 'get_feed', page, limit };
+    if (channel_id) body.channel_id = channel_id;
+    return request('/api/community', body);
+  },
+  // Required: body, channel_id.
+  async createPost(channel_id, body) {
+    const staff_id = await Storage.get('user_id');
+    const staff_name = await Storage.get('user_name');
+    return request('/api/community', { action: 'create_post', body, channel_id, staff_id, staff_name });
+  },
+  // Toggle reaction on a post.
+  async react(post_id, emoji = '👍') {
+    const staff_id = await Storage.get('user_id');
+    return request('/api/community', { action: 'react', post_id, emoji, staff_id });
+  },
+  // Response: { success, data: comments[] }
+  getComments(post_id) {
+    return request('/api/community', { action: 'get_comments', post_id });
+  },
+  // Required: post_id, body.
+  async addComment(post_id, body) {
+    const staff_id = await Storage.get('user_id');
+    const staff_name = await Storage.get('user_name');
+    return request('/api/community', { action: 'add_comment', post_id, body, staff_id, staff_name });
+  },
+  // Response: { success, data: users[] }
+  getMembers() {
+    return request('/api/community', { action: 'community_members' });
+  },
+  // Response: { success, dms: int, notifications: int }
+  getUnreadCounts() {
+    return request('/api/community', { action: 'get_unread_counts' });
+  },
+};
+
+// ── CHAT (Direct Messages) ────────────────────────────────────────────────────
+export const Chat = {
+  // List of users you can DM (staff + partners with portal).
+  // Response: array of { id, full_name, last_message, unread_count, last_seen }
+  getUserList() {
+    return request('/api/chat', { action: 'getUserList' });
+  },
+  // Full conversation thread with another user.
+  // Required: other_id. Response: { messages[], other_profile }
+  getHistory(other_id) {
+    return request('/api/chat', { action: 'getHistory', other_id });
+  },
+  // Send a DM. Required: recipient_id, body.
+  sendMessage(recipient_id, body) {
+    return request('/api/chat', { action: 'sendMessage', recipient_id, body });
+  },
+  // Response: { count: number }
+  getUnreadCount() {
+    return request('/api/chat', { action: 'getUnreadCount' });
   },
 };

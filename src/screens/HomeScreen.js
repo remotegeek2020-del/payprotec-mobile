@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { COLORS } from '../config';
-import { Dashboard, Auth } from '../api';
+import { Dashboard, Auth, getUserPerms } from '../api';
 import { Storage } from '../storage';
 
 function StatCard({ label, value, color }) {
@@ -36,12 +36,14 @@ export default function HomeScreen({ navigation }) {
   const [stats, setStats]         = useState({ merchants: '—', openReturns: '—', activeDeployments: '—', openTasks: '—' });
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [perms, setPerms]         = useState(null);
 
   async function load(refresh = false) {
     if (refresh) setRefreshing(true);
     try {
-      const s = await Dashboard.stats();
+      const [s, p] = await Promise.all([Dashboard.stats(), getUserPerms()]);
       setStats(s);
+      setPerms(p);
     } catch {}
     setLoading(false);
     setRefreshing(false);
@@ -87,14 +89,17 @@ export default function HomeScreen({ navigation }) {
       {/* Quick Links */}
       <Text style={s.sectionTitle}>Quick Access</Text>
       <View style={s.quickGrid}>
-        <QuickLink icon="🏪" label="Merchants"   onPress={() => navigation.navigate('Merchants')} />
-        <QuickLink icon="📦" label="Returns"     onPress={() => navigation.navigate('Returns')} />
-        <QuickLink icon="🚚" label="Deployments" onPress={() => navigation.navigate('Deployments')} />
-        <QuickLink icon="✅" label="Tasks"       onPress={() => navigation.navigate('Tasks')} />
-        <QuickLink icon="🎫" label="Tickets"     onPress={() => navigation.navigate('Tickets')} />
-        <QuickLink icon="🗄️" label="Inventory"   onPress={() => navigation.navigate('Equipment')} />
-        <QuickLink icon="🔧" label="Repair Queue" onPress={() => navigation.navigate('RepairQueue')} />
-        <QuickLink icon="📈" label="Equipment ROI" onPress={() => navigation.navigate('EquipmentROI')} />
+        {(!perms || perms.merchants)    && <QuickLink icon="🏪" label="Merchants"     onPress={() => navigation.navigate('Merchants')} />}
+        {(!perms || perms.returns)      && <QuickLink icon="📦" label="Returns"       onPress={() => navigation.navigate('Returns')} />}
+        {(!perms || perms.deployments)  && <QuickLink icon="🚚" label="Deployments"   onPress={() => navigation.navigate('Deployments')} />}
+        <QuickLink icon="✅" label="Tasks"         onPress={() => navigation.navigate('Tasks')} />
+        <QuickLink icon="🎫" label="Tickets"       onPress={() => navigation.navigate('Tickets')} />
+        {(!perms || perms.inventory)    && <QuickLink icon="🗄️" label="Inventory"     onPress={() => navigation.navigate('Equipment')} />}
+        {(!perms || perms.inventory)    && <QuickLink icon="🔧" label="Repair Queue"  onPress={() => navigation.navigate('RepairQueue')} />}
+        {(!perms || perms.inventory)    && <QuickLink icon="📈" label="Equipment ROI" onPress={() => navigation.navigate('EquipmentROI')} />}
+        {(!perms || perms.partners)     && <QuickLink icon="🤝" label="Partners"      onPress={() => navigation.navigate('Partners')} />}
+        <QuickLink icon="💬" label="Community"     onPress={() => navigation.navigate('Community')} />
+        <QuickLink icon="✉️" label="Messages"      onPress={() => navigation.navigate('Messages')} />
       </View>
     </ScrollView>
   );
