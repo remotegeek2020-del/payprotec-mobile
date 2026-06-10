@@ -92,6 +92,9 @@ export default function HomeScreen({ navigation }) {
         <QuickLink icon="🚚" label="Deployments" onPress={() => navigation.navigate('Deployments')} />
         <QuickLink icon="✅" label="Tasks"       onPress={() => navigation.navigate('Tasks')} />
         <QuickLink icon="🎫" label="Tickets"     onPress={() => navigation.navigate('Tickets')} />
+        <QuickLink icon="🗄️" label="Inventory"   onPress={() => navigation.navigate('Equipment')} />
+        <QuickLink icon="🔧" label="Repair Queue" onPress={() => navigation.navigate('RepairQueue')} />
+        <QuickLink icon="📈" label="Equipment ROI" onPress={() => navigation.navigate('EquipmentROI')} />
       </View>
     </ScrollView>
   );

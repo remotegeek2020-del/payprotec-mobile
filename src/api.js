@@ -264,6 +264,40 @@ export const Equipments = {
   listTerminalTypes() {
     return request('/api/equipments', { action: 'list_terminal_types' });
   },
+  // Update an equipment unit.
+  // Required: id. payload may contain: serial_number, terminal_type, condition,
+  //           notes, received_date, current_location
+  // Response: { success, data[] }
+  update(id, payload) {
+    return request('/api/equipments', { action: 'update', id, payload });
+  },
+  // List units currently at the Warsaw Repairs location.
+  // Response: { success, data[] (rows include repair_stage, repair_notes, days_in_repair),
+  //             summary: { total, critical_count, avg_days_in_repair, stage_counts,
+  //                        model_counts, critical_threshold_days } }
+  listRepairQueue() {
+    return request('/api/equipments', { action: 'list_repair_queue' });
+  },
+  // Log a repair stage change / note on a unit in the repair queue.
+  // Required: equipment_id, repair_stage. Optional: repair_notes
+  // Response: { success }
+  logRepairAction(equipment_id, repair_stage, repair_notes) {
+    return request('/api/equipments', { action: 'log_repair_action', equipment_id, repair_stage, repair_notes });
+  },
+  // Close out a repair. outcome: 'scrap' → decommissioned/Retired,
+  // anything else → stocked/Warsaw Office. Required: equipment_id, outcome
+  // Response: { success }
+  closeRepair(equipment_id, outcome) {
+    return request('/api/equipments', { action: 'close_repair', equipment_id, outcome });
+  },
+  // Fleet ROI / utilization stats.
+  // Optional: idle_threshold_days (default 90)
+  // Response: { success, idle_threshold_days, summary, model_stats[], idle_serials[], location_breakdown[] }
+  getRoiStats(idle_threshold_days) {
+    const body = { action: 'get_roi_stats' };
+    if (idle_threshold_days) body.idle_threshold_days = idle_threshold_days;
+    return request('/api/equipments', body);
+  },
 };
 
 // ── TASKS ─────────────────────────────────────────────────────────────────────

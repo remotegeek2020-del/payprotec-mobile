@@ -15,6 +15,9 @@ import ReturnsScreen            from '../screens/ReturnsScreen';
 import DeploymentsScreen        from '../screens/DeploymentsScreen';
 import TasksScreen              from '../screens/TasksScreen';
 import TicketsScreen            from '../screens/TicketsScreen';
+import EquipmentScreen          from '../screens/EquipmentScreen';
+import RepairQueueScreen        from '../screens/RepairQueueScreen';
+import EquipmentROIScreen       from '../screens/EquipmentROIScreen';
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -27,6 +30,17 @@ const headerOpts = {
 
 function TabIcon({ emoji, focused }) {
   return <Text style={{ fontSize: focused ? 22 : 18, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>;
+}
+
+function HomeStack() {
+  return (
+    <Stack.Navigator screenOptions={headerOpts}>
+      <Stack.Screen name="HomeMain"     component={HomeScreen}         options={{ title: 'Dashboard' }} />
+      <Stack.Screen name="Equipment"    component={EquipmentScreen}    options={{ title: 'Inventory' }} />
+      <Stack.Screen name="RepairQueue"  component={RepairQueueScreen}  options={{ title: 'Repair Queue' }} />
+      <Stack.Screen name="EquipmentROI" component={EquipmentROIScreen} options={{ title: 'Equipment ROI' }} />
+    </Stack.Navigator>
+  );
 }
 
 function MerchantsStack() {
@@ -51,8 +65,9 @@ function MainTabs({ counts }) {
     >
       <Tab.Screen
         name="Home"
-        component={HomeScreen}
+        component={HomeStack}
         options={{
+          headerShown: false,
           title: 'Dashboard',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} />,
         }}
