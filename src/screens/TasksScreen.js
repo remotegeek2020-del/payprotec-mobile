@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../config';
 import { Tasks, Merchants } from '../api';
+import DatePickerModal from '../components/DatePickerModal';
 
 const PRIORITIES = ['Low', 'Normal', 'High'];
 
@@ -107,6 +108,7 @@ function CreateTaskModal({ visible, staff, onClose, onCreated }) {
   const [body, setBody]           = useState('');
   const [priority, setPriority]   = useState('Normal');
   const [dueDate, setDueDate]     = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [assignee, setAssignee]   = useState(null);
   const [merchantQuery, setMerchantQuery] = useState('');
   const [merchantResults, setMerchantResults] = useState([]);
@@ -133,10 +135,6 @@ function CreateTaskModal({ visible, staff, onClose, onCreated }) {
   async function submit() {
     if (!title.trim()) { Alert.alert('Required', 'Please enter a title.'); return; }
     if (!merchant)     { Alert.alert('Required', 'Please link a merchant (search above).'); return; }
-    if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate.trim())) {
-      Alert.alert('Invalid date', 'Use YYYY-MM-DD format for the due date.');
-      return;
-    }
     setSaving(true);
     try {
       const payload = {
@@ -244,14 +242,19 @@ function CreateTaskModal({ visible, staff, onClose, onCreated }) {
                 })}
               </View>
 
-              <Text style={s.fieldLabel}>Due date (YYYY-MM-DD)</Text>
-              <TextInput
-                style={s.input}
-                placeholder="2026-06-30"
-                placeholderTextColor={COLORS.light}
+              <Text style={s.fieldLabel}>Due date</Text>
+              <TouchableOpacity style={s.dateField} onPress={() => setShowDatePicker(true)}>
+                <Text style={dueDate ? s.dateFieldText : s.dateFieldPlaceholder}>
+                  {dueDate || 'Select a date…'}
+                </Text>
+                <Text style={s.dateFieldIcon}>📅</Text>
+              </TouchableOpacity>
+              <DatePickerModal
+                visible={showDatePicker}
                 value={dueDate}
-                onChangeText={setDueDate}
-                autoCapitalize="none"
+                onSelect={setDueDate}
+                onClose={() => setShowDatePicker(false)}
+                title="Due Date"
               />
 
               {staff.length > 0 ? (
@@ -736,4 +739,8 @@ const s = StyleSheet.create({
   commentAuthor:  { fontSize: 11, fontWeight: '700', color: COLORS.primary },
   commentDate:    { fontSize: 11, color: COLORS.light },
   commentInputRow:{ flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginTop: 4 },
+  dateField:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, marginBottom: 14, backgroundColor: '#fff' },
+  dateFieldText:      { fontSize: 14, color: COLORS.text, fontWeight: '500' },
+  dateFieldPlaceholder: { fontSize: 14, color: COLORS.light },
+  dateFieldIcon:      { fontSize: 16 },
 });

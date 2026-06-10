@@ -14,6 +14,13 @@ import MerchantDetailScreen     from '../screens/MerchantDetailScreen';
 import ReturnsScreen            from '../screens/ReturnsScreen';
 import DeploymentsScreen        from '../screens/DeploymentsScreen';
 import TasksScreen              from '../screens/TasksScreen';
+import TicketsScreen            from '../screens/TicketsScreen';
+import EquipmentScreen          from '../screens/EquipmentScreen';
+import RepairQueueScreen        from '../screens/RepairQueueScreen';
+import EquipmentROIScreen       from '../screens/EquipmentROIScreen';
+import PartnersScreen           from '../screens/PartnersScreen';
+import CommunityScreen          from '../screens/CommunityScreen';
+import MessagesScreen           from '../screens/MessagesScreen';
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -26,6 +33,20 @@ const headerOpts = {
 
 function TabIcon({ emoji, focused }) {
   return <Text style={{ fontSize: focused ? 22 : 18, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>;
+}
+
+function HomeStack() {
+  return (
+    <Stack.Navigator screenOptions={headerOpts}>
+      <Stack.Screen name="HomeMain"     component={HomeScreen}         options={{ title: 'Dashboard' }} />
+      <Stack.Screen name="Equipment"    component={EquipmentScreen}    options={{ title: 'Inventory' }} />
+      <Stack.Screen name="RepairQueue"  component={RepairQueueScreen}  options={{ title: 'Repair Queue' }} />
+      <Stack.Screen name="EquipmentROI" component={EquipmentROIScreen} options={{ title: 'Equipment ROI' }} />
+      <Stack.Screen name="Partners"     component={PartnersScreen}     options={{ title: 'Partners' }} />
+      <Stack.Screen name="Community"    component={CommunityScreen}    options={{ title: 'Community' }} />
+      <Stack.Screen name="Messages"     component={MessagesScreen}     options={{ title: 'Messages' }} />
+    </Stack.Navigator>
+  );
 }
 
 function MerchantsStack() {
@@ -50,8 +71,9 @@ function MainTabs({ counts }) {
     >
       <Tab.Screen
         name="Home"
-        component={HomeScreen}
+        component={HomeStack}
         options={{
+          headerShown: false,
           title: 'Dashboard',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} />,
         }}
@@ -90,6 +112,15 @@ function MainTabs({ counts }) {
           title: 'Tasks',
           tabBarBadge: counts.tasks > 0 ? counts.tasks : undefined,
           tabBarIcon: ({ focused }) => <TabIcon emoji="✅" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Tickets"
+        component={TicketsScreen}
+        options={{
+          title: 'Tickets',
+          tabBarBadge: counts.tickets > 0 ? counts.tickets : undefined,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🎫" focused={focused} />,
         }}
       />
     </Tab.Navigator>
