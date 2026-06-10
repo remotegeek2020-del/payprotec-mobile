@@ -105,7 +105,7 @@ export default function AppNavigator() {
     async function fetchCounts() {
       try {
         const data = await Notifications.getCounts();
-        if (active && data) setCounts(data);
+        if (active && data?.counts) setCounts(data.counts);
       } catch {}
     }
 

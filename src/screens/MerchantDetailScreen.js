@@ -88,12 +88,13 @@ function InfoTab({ merchant: m }) {
 
 function NoteCard({ note }) {
   const isSystem = note.type === 'system';
-  const author   = note.user_name || note.created_by_name || 'Unknown';
+  const author   = note.display_name || note.user_name || note.created_by_name || 'Unknown';
   const date     = formatDate(note.created_at);
 
   return (
     <View style={[s.noteCard, isSystem && s.noteCardSystem]}>
-      <Text style={[s.noteContent, isSystem && s.noteContentSystem]}>{note.content || note.note || ''}</Text>
+      {note.title ? <Text style={s.noteTitle}>{note.title}</Text> : null}
+      <Text style={[s.noteContent, isSystem && s.noteContentSystem]}>{note.body || note.content || note.note || ''}</Text>
       <View style={s.noteMeta}>
         <Text style={s.noteAuthor}>{author}</Text>
         {date ? <Text style={s.noteDate}>{date}</Text> : null}
@@ -128,11 +129,17 @@ function NotesTab({ merchantId }) {
     if (!content || posting) return;
     setPosting(true);
     try {
-      const res = await Merchants.addNote(merchantId, content);
-      const newNote = res.note || res.data || { content, created_at: new Date().toISOString() };
-      setNotes(prev => [newNote, ...prev]);
-      setNoteText('');
-      setShowInput(false);
+      // Backend requires a title — derive it from the first line of the note.
+      const firstLine = content.split('\n')[0];
+      const title = firstLine.length > 80 ? `${firstLine.slice(0, 77)}…` : firstLine;
+      const res = await Merchants.addNote(merchantId, title, content);
+      if (res.success) {
+        setNoteText('');
+        setShowInput(false);
+        // Re-fetch so we get the server-rendered note (display_name etc.)
+        const data = await Merchants.getNotes(merchantId);
+        setNotes(data.data || data.notes || []);
+      }
     } catch {}
     setPosting(false);
   }
@@ -289,7 +296,8 @@ const TABS = ['Info', 'Notes', 'Tasks'];
 
 export default function MerchantDetailScreen({ route }) {
   const m          = route.params?.merchant || {};
-  const merchantId = m.merchant_id || m.id;
+  // The merchants API expects merchant_uuid = the row UUID (m.id), not the MID.
+  const merchantId = m.id || m.merchant_id;
   const [activeTab, setActiveTab] = useState('Info');
 
   return (
@@ -359,6 +367,7 @@ const s = StyleSheet.create({
   notesList:    { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 20 },
   noteCard:     { backgroundColor: COLORS.card, borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   noteCardSystem: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: COLORS.border },
+  noteTitle:    { fontSize: 13, fontWeight: '800', color: COLORS.text, marginBottom: 4 },
   noteContent:  { fontSize: 14, color: COLORS.text, lineHeight: 20, marginBottom: 8 },
   noteContentSystem: { color: COLORS.muted, fontSize: 13 },
   noteMeta:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
