@@ -35,9 +35,7 @@ export default function DashboardScreen({ navigation, person }) {
   async function load() {
     setLoading(true);
     try {
-      const person_id = person?.id || await Storage.get('partner_person_id');
-      if (!person_id) { setLoading(false); return; }
-      const res = await Dashboard.getScorecard(person_id);
+      const res = await Dashboard.getScorecard();
       if (res.success) setScorecard(res.scorecard || res);
     } catch (e) { /* ignore */ }
     setLoading(false);

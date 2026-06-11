@@ -1,15 +1,16 @@
 import { API_BASE_URL } from './config';
 import { Storage } from './storage';
 
-async function request(path, body) {
-  const token = await Storage.get('partner_session_token');
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+// The partner backend (merchant-management-console) expects the session token
+// inside the POST body as `token` — it never reads the Authorization header.
+async function request(path, body, { auth = true } = {}) {
+  const token = auth ? await Storage.get('partner_session_token') : null;
+  const payload = token ? { token, ...body } : body;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 
   let data;
@@ -20,7 +21,8 @@ async function request(path, body) {
     return { success: false, error: `Server error (${res.status}): ${text.slice(0, 200)}` };
   }
 
-  if (res.status === 401 && data.reason === 'session_expired') {
+  // A 401 on an authenticated call means the partner session is gone.
+  if (res.status === 401 && token) {
     await Storage.remove('partner_session_token');
     throw { sessionExpired: true };
   }
@@ -38,13 +40,15 @@ export const Auth = {
       action:   'login',
       email:    email.trim().toLowerCase(),
       password,
-    });
+    }, { auth: false });
     if (data.success && data.token) {
       await Storage.set('partner_session_token', data.token);
       const p = data.partner || {};
       if (p.id)    await Storage.set('partner_person_id', p.id);
       if (p.name)  await Storage.set('partner_name', p.name);
       if (p.email) await Storage.set('partner_email', p.email);
+      // Normalized shape the screens already consume
+      data.person = { id: p.id, full_name: p.name, email: p.email };
     }
     return data;
   },
@@ -64,8 +68,7 @@ export const Auth = {
   },
 
   async logout() {
-    const token = await Storage.get('partner_session_token');
-    try { await request('/api/partner-auth', { action: 'logout', token }); } catch (e) { /* ignore */ }
+    try { await request('/api/partner-auth', { action: 'logout' }); } catch (e) { /* ignore */ }
     for (const k of ['partner_session_token','partner_person_id','partner_name','partner_email','partner_identifiers']) {
       await Storage.remove(k);
     }
@@ -83,11 +86,42 @@ export const Auth = {
   },
 };
 
-// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+// ── DASHBOARD (api/partner-data.js) ───────────────────────────────────────────
 export const Dashboard = {
-  // Uses validate to get identifiers alongside partner info
-  getScorecard(person_id) {
-    return request('/api/partners', { action: 'get_scorecard', person_id });
+  // Combines get_dashboard + get_my_rank into the scorecard shape the screens use.
+  // Returns: { success, person, identifiers[], scorecard: { merchant_count, volume_30d, volume_90d, volume_mtd, rank, tier, companies[] } }
+  async getScorecard() {
+    const [dash, rank] = await Promise.all([
+      request('/api/partner-data', { action: 'get_dashboard' }),
+      request('/api/partner-data', { action: 'get_my_rank' }).catch(() => ({})),
+    ]);
+    if (!dash.success) return dash;
+
+    const ov = dash.overview || {};
+    const companiesMap = dash.companies || {};
+    const identifiers = (dash.identifiers || []).map(id => ({
+      ...id,
+      company_name: companiesMap[id.agent_id] || '',
+    }));
+    const companies = [...new Set(Object.values(companiesMap))].map(name => ({ company_name: name }));
+
+    return {
+      success: true,
+      person: dash.partner,
+      identifiers,
+      scorecard: {
+        merchant_count: ov.merchants,
+        approved:       ov.approved,
+        pending:        ov.pending,
+        volume_30d:     ov.vol30,
+        volume_90d:     ov.vol90,
+        volume_mtd:     ov.mtd,
+        open_rmas:      ov.open_rmas,
+        rank:           rank?.rank ?? null,
+        tier:           rank?.tier ?? null,
+        companies,
+      },
+    };
   },
 
   // Get cached identifiers from storage (populated on login/validate)
@@ -98,18 +132,24 @@ export const Dashboard = {
   },
 };
 
-// ── MERCHANTS ─────────────────────────────────────────────────────────────────
+// ── MERCHANTS (api/partner-data.js) ───────────────────────────────────────────
 export const Merchants = {
-  getByIdentifier(identifier_id) {
-    return request('/api/partners', { action: 'get_merchant_data_raw', identifier_id });
+  // Get merchants for one agent identifier string (e.g. the partner's agent ID).
+  // The backend returns all of the partner's merchants; we filter by agent_id.
+  async getByIdentifier(id_string) {
+    const res = await request('/api/partner-data', { action: 'get_merchants', page: 0, limit: 1000 });
+    if (!res.success) return res;
+    const data = id_string ? (res.data || []).filter(m => m.agent_id === id_string) : (res.data || []);
+    return { ...res, data };
   },
 
+  // Full merchant detail: { success, data: { merchant, equipment, legacyEquipment, notes, rmas } }
   get(merchant_uuid) {
-    return request('/api/merchants', { action: 'get_full_merchant', merchant_uuid });
+    return request('/api/partner-data', { action: 'get_merchant_detail', merchant_uuid });
   },
 };
 
-// ── TICKETS ───────────────────────────────────────────────────────────────────
+// ── TICKETS (api/tickets.js — partner actions, token in body) ─────────────────
 export const Tickets = {
   list(merchant_uuid) {
     const body = { action: 'list_for_partner' };
@@ -138,7 +178,7 @@ export const Tickets = {
   },
 };
 
-// ── COMMUNITY ─────────────────────────────────────────────────────────────────
+// ── COMMUNITY (api/community.js — partner identified via body token) ──────────
 export const Community = {
   getChannels() {
     return request('/api/community', { action: 'get_channels' });
@@ -148,51 +188,60 @@ export const Community = {
     if (channel_id) body.channel_id = channel_id;
     return request('/api/community', body);
   },
-  async createPost(channel_id, body) {
-    const partner_id   = await Storage.get('partner_person_id');
-    const partner_name = await Storage.get('partner_name');
-    return request('/api/community', { action: 'create_post', body, channel_id, partner_id, partner_name });
+  createPost(channel_id, body) {
+    return request('/api/community', { action: 'create_post', body, channel_id });
   },
-  async react(post_id, emoji = '👍') {
-    const partner_id = await Storage.get('partner_person_id');
-    return request('/api/community', { action: 'react', post_id, emoji, partner_id });
+  react(post_id, emoji = '👍') {
+    return request('/api/community', { action: 'react', post_id, emoji });
   },
   getComments(post_id) {
     return request('/api/community', { action: 'get_comments', post_id });
   },
-  async addComment(post_id, body) {
-    const partner_id   = await Storage.get('partner_person_id');
-    const partner_name = await Storage.get('partner_name');
-    return request('/api/community', { action: 'add_comment', post_id, body, partner_id, partner_name });
+  addComment(post_id, body) {
+    return request('/api/community', { action: 'add_comment', post_id, body });
   },
 };
 
-// ── MESSAGES ──────────────────────────────────────────────────────────────────
+// ── MESSAGES (api/partner-data.js) ────────────────────────────────────────────
+// The partner portal has a single message thread with PayProTec staff
+// (get_messages / send_message), not per-user conversations.
+const SUPPORT_USER = { id: 'support', name: 'PayProTec Support', role: 'Staff' };
+
 export const Chat = {
-  getUserList() {
-    return request('/api/chat', { action: 'get_user_list' });
+  async getUserList() {
+    return { success: true, users: [SUPPORT_USER] };
   },
 
-  getHistory(other_user_id) {
-    return request('/api/chat', { action: 'get_history', other_user_id });
+  async getHistory() {
+    // Response: { success, data: [{ id, sender_id, recipient_id, subject, body, created_at }] }
+    const res = await request('/api/partner-data', { action: 'get_messages' });
+    if (!res.success) return res;
+    // Backend returns newest-first; the thread renders oldest-first
+    const data = [...(res.data || [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return { ...res, data };
   },
 
-  sendMessage(recipient_id, message) {
-    return request('/api/chat', { action: 'send_message', recipient_id, message });
+  sendMessage(_recipient_id, message) {
+    return request('/api/partner-data', { action: 'send_message', body: message });
   },
 };
 
-// ── PROFILE ───────────────────────────────────────────────────────────────────
+// ── PROFILE (api/partner-data.js) ─────────────────────────────────────────────
 export const Profile = {
-  get(person_id) {
-    return request('/api/partners', { action: 'get_scorecard', person_id });
+  // Returns: { success, person, identifiers[] }
+  async get() {
+    const res = await request('/api/partner-data', { action: 'get_dashboard' });
+    if (!res.success) return res;
+    return { success: true, person: res.partner, identifiers: res.identifiers || [] };
   },
 
-  updateField(id, field, value) {
-    return request('/api/partners', { action: 'update_person_field', id, field, value });
+  // Backend only supports full_name and phone_number via update_profile.
+  updateField(_id, field, value) {
+    return request('/api/partner-data', { action: 'update_profile', [field]: value });
   },
 
-  changePassword(token, current_password, new_password) {
-    return request('/api/partner-auth', { action: 'change_password', token, current_password, new_password });
+  async changePassword(current_password, new_password) {
+    const partner_id = await Storage.get('partner_person_id');
+    return request('/api/partner-auth', { action: 'change_password', partner_id, current_password, new_password });
   },
 };

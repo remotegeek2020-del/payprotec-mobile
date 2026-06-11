@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { COLORS } from '../config';
 import { Dashboard, Merchants } from '../api';
-import { Storage } from '../storage';
 
 const STATUS_COLORS = {
   approved:     { bg: '#d1fae5', text: '#059669' },
@@ -133,25 +132,23 @@ export default function MerchantsScreen() {
   const [query, setQuery]               = useState('');
 
   async function loadIdentifiers() {
-    const person_id = await Storage.get('partner_person_id');
-    if (!person_id) return;
-    const res = await Dashboard.getScorecard(person_id);
+    const res = await Dashboard.getScorecard();
     const ids = (res.identifiers || []).map(id => ({
       id:        id.id,
-      id_string: id.id_string || id.identifier || id.agent_id_string || '—',
+      id_string: id.id_string || '—',
       company:   id.company_name || '',
     }));
     setIdentifiers(ids);
     if (ids.length > 0) {
-      setActiveId(ids[0].id);
-      loadMerchants(ids[0].id);
+      setActiveId(ids[0].id_string);
+      loadMerchants(ids[0].id_string);
     }
   }
 
-  async function loadMerchants(identifier_id) {
+  async function loadMerchants(id_string) {
     setLoading(true);
     try {
-      const res = await Merchants.getByIdentifier(identifier_id);
+      const res = await Merchants.getByIdentifier(id_string);
       setMerchants(res.data || res.merchants || []);
     } catch (e) { /* ignore */ }
     setLoading(false);
@@ -186,12 +183,12 @@ export default function MerchantsScreen() {
       {identifiers.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.idBar} contentContainerStyle={s.idBarContent}>
           {identifiers.map(id => {
-            const active = id.id === activeId;
+            const active = id.id_string === activeId;
             return (
               <TouchableOpacity
-                key={id.id}
+                key={id.id || id.id_string}
                 style={[s.idChip, active && s.idChipActive]}
-                onPress={() => selectId(id.id)}
+                onPress={() => selectId(id.id_string)}
               >
                 <Text style={[s.idChipText, active && s.idChipTextActive]}>{id.id_string}</Text>
                 {id.company ? <Text style={[s.idChipSub, active && { color: 'rgba(255,255,255,0.75)' }]}>{id.company}</Text> : null}
