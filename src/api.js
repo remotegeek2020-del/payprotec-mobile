@@ -91,12 +91,22 @@ export const Auth = {
 
 // ── MERCHANTS ─────────────────────────────────────────────────────────────────
 export const Merchants = {
-  // Response: { success, data[], count, metrics }
+  // Response: { success, data[], count,
+  //             metrics: { totalMTD, total30D, total90D, portfolioShare } }
   // Backend only filters when BOTH query and filterBy are sent; page is 0-based.
-  list(query = '', page = 1, limit = 20, filterBy = 'dba_name') {
+  // filterBy: dba_name | merchant_id | agent_id | company_name | partner_name
+  // statusFilter: e.g. 'Approved', 'Closed', 'Pending' …
+  list(query = '', page = 1, limit = 20, filterBy = 'dba_name', statusFilter = '') {
     const body = { action: 'list', page: Math.max(0, page - 1), limit };
     if (query) { body.query = query; body.filterBy = filterBy; }
+    if (statusFilter) body.statusFilter = statusFilter;
     return request('/api/merchants', body);
+  },
+  // Update merchant fields. id = merchant row UUID; payload = fields to change.
+  // Response: { success, data: [updated_merchant] }
+  async update(id, payload) {
+    const user = await Storage.get('user_name');
+    return request('/api/merchants', { action: 'update', id, payload, user });
   },
   // merchant_uuid is the merchant row UUID (m.id), NOT the MID.
   get(merchant_uuid) {
@@ -123,6 +133,43 @@ export const Merchants = {
   // Response: { success, merchant_id }
   create(payload) {
     return request('/api/merchants', { action: 'create', ...payload });
+  },
+  // Current + past equipment at a merchant.
+  // Response: { success, current: [{id, serial_number, terminal_type, deployment_id}],
+  //             past: [{serial_number, terminal_type, deployment_display_id, return_display_id}] }
+  getEquipment(merchant_uuid) {
+    return request('/api/merchants', { action: 'get_merchant_equipment', merchant_uuid });
+  },
+  // Add a task to a merchant. Required: merchant_uuid, title.
+  // Optional: body, due_date, assigned_to.
+  async addTask(merchant_uuid, title, { body, due_date, assigned_to } = {}) {
+    const created_by = await Storage.get('user_id');
+    return request('/api/merchants', { action: 'add_task', merchant_uuid, title, body, due_date, assigned_to, created_by });
+  },
+  // Toggle a task between Pending and Completed.
+  // Response: { success, status }
+  updateTaskStatus(task_id) {
+    return request('/api/merchants', { action: 'update_task_status', task_id });
+  },
+  // Look up an agent name by agent ID string. Response: { found, agent_name? }
+  lookupAgent(agent_id) {
+    return request('/api/merchants', { action: 'lookup_agent', agent_id });
+  },
+  // Onboarding pipeline stats. period in days (1–730), or date_from/date_to.
+  // Response: { success, stages[], period_counts, approved_period, declined_period,
+  //             conversion_rate, top_partners[{name,count}], recent[] }
+  getPipelineStats({ period, date_from, date_to } = {}) {
+    const body = { action: 'get_pipeline_stats' };
+    if (period)    body.period    = period;
+    if (date_from) body.date_from = date_from;
+    if (date_to)   body.date_to   = date_to;
+    return request('/api/merchants', body);
+  },
+  // Prime49 residuals rows.
+  // Response: { success, data: [{dba_name, merchant_id, volume_30_day, agent_id,
+  //             agent_name, agent_company, rev_share, net_residual, ppt_residual, agent_residual}] }
+  getPrime49Residuals() {
+    return request('/api/merchants', { action: 'get_prime49_residuals' });
   },
 };
 
