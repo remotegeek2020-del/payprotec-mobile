@@ -7,10 +7,6 @@ import {
 import { COLORS } from '../config';
 import { Tickets } from '../api';
 
-const TICKET_TYPES = ['General', 'Deployment', 'RMA', 'Billing', 'Technical'];
-
-const PRIORITIES = ['Low', 'Normal', 'High', 'Urgent'];
-
 const STATUS_COLORS = {
   open:        { bg: '#dbeafe', text: '#1d4ed8' },
   'in progress':{ bg: '#fef3c7', text: '#d97706' },
@@ -73,125 +69,6 @@ function TicketCard({ item, onOpen }) {
         {item.created_at ? <Text style={s.date}>{formatDate(item.created_at)}</Text> : null}
       </View>
     </TouchableOpacity>
-  );
-}
-
-// ── Create ticket modal ────────────────────────────────────────────────────────
-
-function CreateTicketModal({ visible, onClose, onCreated }) {
-  const [type, setType]             = useState('General');
-  const [subject, setSubject]       = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority]     = useState('Normal');
-  const [saving, setSaving]         = useState(false);
-
-  function reset() {
-    setType('General'); setSubject(''); setDescription(''); setPriority('Normal');
-  }
-
-  async function submit() {
-    if (!subject.trim()) { Alert.alert('Required', 'Enter a subject for the ticket.'); return; }
-    setSaving(true);
-    try {
-      const payload = {
-        type,
-        subject: subject.trim(),
-        priority,
-      };
-      if (description.trim()) payload.description = description.trim();
-
-      const res = await Tickets.create(payload);
-      if (res.success) {
-        reset();
-        onCreated();
-      } else {
-        Alert.alert('Error', res.error || res.message || 'Could not create ticket.');
-      }
-    } catch {
-      Alert.alert('Error', 'Could not create ticket. Check your connection.');
-    }
-    setSaving(false);
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => { reset(); onClose(); }}>
-      <View style={s.modalOverlay}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalWrap}>
-          <View style={s.modalCard}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>New Ticket</Text>
-              <TouchableOpacity onPress={() => { reset(); onClose(); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={s.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
-              <Text style={s.fieldLabel}>Type *</Text>
-              <View style={s.chipRow}>
-                {TICKET_TYPES.map(t => {
-                  const active = type === t;
-                  return (
-                    <TouchableOpacity
-                      key={t}
-                      style={[s.chip, active && s.chipActive]}
-                      onPress={() => setType(t)}
-                    >
-                      <Text style={[s.chipText, active && s.chipTextActive]}>{t}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={s.fieldLabel}>Subject *</Text>
-              <TextInput
-                style={s.input}
-                placeholder="Brief description of the issue"
-                placeholderTextColor={COLORS.light}
-                value={subject}
-                onChangeText={setSubject}
-              />
-
-              <Text style={s.fieldLabel}>Description</Text>
-              <TextInput
-                style={[s.input, s.inputMultiline]}
-                placeholder="Detailed description (optional)"
-                placeholderTextColor={COLORS.light}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-              />
-
-              <Text style={s.fieldLabel}>Priority</Text>
-              <View style={s.chipRow}>
-                {PRIORITIES.map(p => {
-                  const active = priority === p;
-                  const pc = priorityColor(p);
-                  return (
-                    <TouchableOpacity
-                      key={p}
-                      style={[s.chip, active && { backgroundColor: pc.bg, borderColor: pc.text }]}
-                      onPress={() => setPriority(p)}
-                    >
-                      <Text style={[s.chipText, active && { color: pc.text }]}>{p}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TouchableOpacity
-                style={[s.primaryBtn, saving && { opacity: 0.6 }]}
-                onPress={submit}
-                disabled={saving}
-              >
-                {saving
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={s.primaryBtnText}>Create Ticket</Text>}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
   );
 }
 
@@ -327,7 +204,6 @@ export default function TicketsScreen() {
   const [loading, setLoading]         = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
   const [selected, setSelected]       = useState(null);
-  const [showCreate, setShowCreate]   = useState(false);
   const [query, setQuery]             = useState('');
 
   async function load() {
@@ -380,17 +256,6 @@ export default function TicketsScreen() {
         ListEmptyComponent={!loading ? <Text style={s.empty}>No tickets found</Text> : null}
       />
 
-      {/* FAB */}
-      <TouchableOpacity style={s.fab} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
-        <Text style={s.fabText}>＋</Text>
-      </TouchableOpacity>
-
-      <CreateTicketModal
-        visible={showCreate}
-        onClose={() => setShowCreate(false)}
-        onCreated={() => { setShowCreate(false); load(); }}
-      />
-
       <TicketDetailModal
         ticket={selected}
         onClose={() => setSelected(null)}
@@ -404,7 +269,7 @@ const s = StyleSheet.create({
   searchBar:   { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.card, margin: 14, borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: COLORS.border },
   searchIcon:  { fontSize: 16, marginRight: 6 },
   searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: COLORS.text },
-  list:        { paddingHorizontal: 14, paddingBottom: 90 },
+  list:        { paddingHorizontal: 14, paddingBottom: 30 },
   card:        { backgroundColor: COLORS.card, borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   cardTop:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 8 },
   ticketNum:   { fontSize: 13, fontWeight: '800', color: COLORS.primary, fontFamily: 'monospace' },
@@ -416,10 +281,6 @@ const s = StyleSheet.create({
   date:        { fontSize: 11, color: COLORS.light, marginLeft: 'auto' },
   empty:       { textAlign: 'center', color: COLORS.muted, padding: 40, fontSize: 14 },
   emptySmall:  { color: COLORS.muted, fontSize: 12, marginBottom: 8 },
-
-  // FAB
-  fab:         { position: 'absolute', right: 20, bottom: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
-  fabText:     { color: '#fff', fontSize: 28, fontWeight: '700', lineHeight: 32 },
 
   // Modal shared
   modalOverlay:{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
