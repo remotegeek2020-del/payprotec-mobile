@@ -168,7 +168,7 @@ function IdentifierRow({ ident, onSaved }) {
       } else {
         Alert.alert('Error', res?.message || 'Failed to update identifier.');
       }
-    } catch {
+    } catch (e) {
       Alert.alert('Error', 'Failed to update identifier.');
     }
     setSaving(false);
@@ -333,7 +333,7 @@ const STATUS_COLORS = {
 
 function fmtDate(d) {
   if (!d) return '—';
-  try { return new Date(d).toLocaleDateString(); } catch { return String(d); }
+  try { return new Date(d).toLocaleDateString(); } catch (e) { return String(d); }
 }
 
 function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
@@ -440,7 +440,7 @@ function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
       } else {
         Alert.alert('Error', res?.message || 'Failed to add note.');
       }
-    } catch {
+    } catch (e) {
       Alert.alert('Error', 'Failed to add note.');
     }
     setNoteSaving(false);
@@ -1128,7 +1128,7 @@ export default function PartnersScreen() {
           agent_count: aArr.filter(a => a.company_id === c.id).length,
         })));
       }
-    } catch {}
+    } catch (e) {}
     setLoading(false);
     setRefreshing(false);
   }

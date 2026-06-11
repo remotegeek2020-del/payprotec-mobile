@@ -45,7 +45,7 @@ function fmt$(n) {
 
 function fmtDate(d) {
   if (!d) return '—';
-  try { return new Date(d).toLocaleDateString(); } catch { return String(d); }
+  try { return new Date(d).toLocaleDateString(); } catch (e) { return String(d); }
 }
 
 // ── Merchant card ─────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ function CreateMerchantModal({ visible, onClose, onCreated }) {
         setAgentName('');
         Alert.alert('Not found', `No partner with ID "${agentId.trim()}".`);
       }
-    } catch {
+    } catch (e) {
       Alert.alert('Error', 'Lookup failed.');
     }
     setAgentLookupBusy(false);
@@ -164,7 +164,7 @@ function CreateMerchantModal({ visible, onClose, onCreated }) {
       } else {
         Alert.alert('Error', res.error || res.message || 'Could not create merchant.');
       }
-    } catch {
+    } catch (e) {
       Alert.alert('Error', 'Could not create merchant. Check your connection.');
     }
     setSaving(false);
@@ -442,7 +442,7 @@ export default function MerchantsScreen({ navigation }) {
       setTotal(data.totalCount ?? data.count ?? 0);
       if (data.metrics) setMetrics(data.metrics);
       setPage(pg);
-    } catch {}
+    } catch (e) {}
     setLoading(false);
     setRefreshing(false);
   }

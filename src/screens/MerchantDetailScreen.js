@@ -125,7 +125,7 @@ function DetailsTab({ merchant: m, onSaved }) {
       } else {
         Alert.alert('Error', res?.message || 'Failed to save changes.');
       }
-    } catch {
+    } catch (e) {
       setSaving(false);
       Alert.alert('Error', 'Failed to save changes.');
     }
@@ -371,7 +371,7 @@ function NotesTab({ merchantId }) {
         const data = await Merchants.getNotes(merchantId);
         setNotes(data.data || data.notes || []);
       }
-    } catch {}
+    } catch (e) {}
     setPosting(false);
   }
 
@@ -533,7 +533,7 @@ function TasksTab({ merchantUuid }) {
       } else {
         Alert.alert('Error', res?.message || 'Failed to add task.');
       }
-    } catch {
+    } catch (e) {
       Alert.alert('Error', 'Failed to add task.');
     }
     setPosting(false);
