@@ -399,6 +399,52 @@ export const Partners = {
   getList() {
     return request('/api/partners', { action: 'get_partners_list' });
   },
+  // Companies with agent counts.
+  // Response: { success, data: [{id, company_name, agent_count}] }
+  getCompaniesFull() {
+    return request('/api/partners', { action: 'get_companies_full' });
+  },
+  // Agents (and their identifiers) for a company.
+  // Required: company_id.
+  // Response: { success, data: [{agent_id, person_id, person_name, person_email,
+  //             identifiers: [{id, id_string, rev_share}] }] }
+  getCompanyAgents(company_id) {
+    return request('/api/partners', { action: 'get_company_agents', company_id });
+  },
+  // Identifiers not tied to any company.
+  // Response: { success, data: [{id, id_string, rev_share, prime49, person_name, person_email, person_id}] }
+  getIndependentIdentifiers() {
+    return request('/api/partners', { action: 'get_independent_identifiers' });
+  },
+  // Update one field on a person record.
+  // Required: id (person id), field, value.
+  // field MUST be one of: full_name, email, phone_number, is_branded, enrolled_at.
+  // Response: { success }
+  updatePersonField(id, field, value) {
+    return request('/api/partners', { action: 'update_person_field', id, field, value });
+  },
+  // Update an identifier's rev_share / prime49 / parent company.
+  // Required: id (identifier id). NOTE: the id_string itself is IMMUTABLE —
+  // the backend has no action to rename an agent ID.
+  // Response: { success }
+  updateIdentifier(id, { rev_share, prime49, new_parent_id } = {}) {
+    return request('/api/partners', { action: 'update_identifier_all', id, rev_share, prime49, new_parent_id });
+  },
+  // Create a partner (full onboarding).
+  // payload: { person: {name, email, phone, hl_id, is_branded, enrolled_at},
+  //            company: {id, name, isIndependent},   // existing: id; new: name only; none: isIndependent=true
+  //            identifiers: [{string, rev, prime}],
+  //            isQuickAdd, allowNoEmail }
+  // person.name required; email required unless allowNoEmail=true.
+  // Response: { success, message? }
+  createPartner(payload) {
+    return request('/api/partners', { action: 'complete_onboarding', ...payload });
+  },
+  // Lightweight companies list (for pickers).
+  // Response: { success, data: [{id, company_name}] }
+  getCompanies() {
+    return request('/api/partners', { action: 'get_companies' });
+  },
 };
 
 // ── COMMUNITY ─────────────────────────────────────────────────────────────────
