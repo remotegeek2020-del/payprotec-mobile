@@ -23,11 +23,10 @@ export default function LoginScreen({ onLogin }) {
       if (res.success) {
         onLogin(res.person);
       } else {
-        Alert.alert('Login Failed', res.error || res.message || 'Invalid email or password.');
+        Alert.alert('Login Failed', res.error || res.message || res.reason || JSON.stringify(res));
       }
     } catch (e) {
-      const msg = e?.message || JSON.stringify(e) || 'Unknown error';
-      Alert.alert('Error', `Login failed: ${msg}`);
+      Alert.alert('Error', e?.message || JSON.stringify(e) || 'Network error');
     }
     setLoading(false);
   }

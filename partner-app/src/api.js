@@ -14,7 +14,7 @@ async function request(path, body) {
 
   const data = await res.json();
 
-  if (res.status === 401) {
+  if (res.status === 401 && data.reason === 'session_expired') {
     await Storage.remove('partner_session_token');
     throw { sessionExpired: true };
   }
@@ -25,13 +25,7 @@ async function request(path, body) {
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 export const Auth = {
   async login(email, password) {
-    // Try /api/partner-login first; fallback action name partner_login
-    let data;
-    try {
-      data = await request('/api/partner-login', { email, password });
-    } catch (e) {
-      data = await request('/api/login', { action: 'partner_login', email, password });
-    }
+    const data = await request('/api/partner-login', { email, password });
     if (data.success && data.sessionToken) {
       await Storage.set('partner_session_token', data.sessionToken);
       const p = data.person || {};
