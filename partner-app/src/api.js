@@ -32,8 +32,8 @@ async function request(path, body) {
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 export const Auth = {
   async login(email, password) {
-    // Server may use 'password' or 'passkey' — send both
-    const data = await request('/api/partner-login', { email, password, passkey: password });
+    // Partner login uses same /api/login endpoint as staff, with action: partner_login
+    const data = await request('/api/login', { action: 'partner_login', email, password, passkey: password });
     if (data.success && data.sessionToken) {
       await Storage.set('partner_session_token', data.sessionToken);
       const p = data.person || {};
@@ -45,7 +45,7 @@ export const Auth = {
   },
 
   async logout() {
-    try { await request('/api/partner-login', { action: 'logout' }); } catch (e) { /* ignore */ }
+    try { await request('/api/login', { action: 'partner_logout' }); } catch (e) { /* ignore */ }
     for (const k of ['partner_session_token','partner_person_id','partner_name','partner_email']) {
       await Storage.remove(k);
     }
