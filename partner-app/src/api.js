@@ -12,7 +12,14 @@ async function request(path, body) {
     body: JSON.stringify(body),
   });
 
-  const data = await res.json();
+  let data;
+  const text = await res.text();
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    // Server returned non-JSON (HTML error page, redirect, etc.)
+    return { success: false, error: `Server error (${res.status}): ${text.slice(0, 120)}` };
+  }
 
   if (res.status === 401 && data.reason === 'session_expired') {
     await Storage.remove('partner_session_token');
@@ -25,7 +32,8 @@ async function request(path, body) {
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 export const Auth = {
   async login(email, password) {
-    const data = await request('/api/partner-login', { email, password });
+    // Server may use 'password' or 'passkey' — send both
+    const data = await request('/api/partner-login', { email, password, passkey: password });
     if (data.success && data.sessionToken) {
       await Storage.set('partner_session_token', data.sessionToken);
       const p = data.person || {};
