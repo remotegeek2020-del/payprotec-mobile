@@ -17,8 +17,7 @@ async function request(path, body) {
   try {
     data = JSON.parse(text);
   } catch (e) {
-    // Server returned non-JSON (HTML error page, redirect, etc.)
-    return { success: false, error: `Server error (${res.status}): ${text.slice(0, 120)}` };
+    return { success: false, error: `Server error (${res.status}): ${text.slice(0, 200)}` };
   }
 
   if (res.status === 401 && data.reason === 'session_expired') {
@@ -30,23 +29,44 @@ async function request(path, body) {
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
+// Endpoint: POST /api/partner-auth
+// Login response: { success, token, partner: { id, name, email } }
+// Validate response: { success, partner, identifiers[], is_branded }
 export const Auth = {
   async login(email, password) {
-    // Partner login uses same /api/login endpoint as staff, with action: partner_login
-    const data = await request('/api/login', { action: 'partner_login', email, password, passkey: password });
-    if (data.success && data.sessionToken) {
-      await Storage.set('partner_session_token', data.sessionToken);
-      const p = data.person || {};
-      if (p.id)         await Storage.set('partner_person_id', p.id);
-      if (p.full_name)  await Storage.set('partner_name', p.full_name);
-      if (p.email)      await Storage.set('partner_email', p.email);
+    const data = await request('/api/partner-auth', {
+      action:   'login',
+      email:    email.trim().toLowerCase(),
+      password,
+    });
+    if (data.success && data.token) {
+      await Storage.set('partner_session_token', data.token);
+      const p = data.partner || {};
+      if (p.id)    await Storage.set('partner_person_id', p.id);
+      if (p.name)  await Storage.set('partner_name', p.name);
+      if (p.email) await Storage.set('partner_email', p.email);
+    }
+    return data;
+  },
+
+  async validate() {
+    const token = await Storage.get('partner_session_token');
+    if (!token) return null;
+    const data = await request('/api/partner-auth', { action: 'validate', token });
+    if (data.success) {
+      const p = data.partner || {};
+      if (p.id)    await Storage.set('partner_person_id', p.id);
+      if (p.name)  await Storage.set('partner_name', p.name);
+      if (p.email) await Storage.set('partner_email', p.email);
+      if (data.identifiers) await Storage.set('partner_identifiers', JSON.stringify(data.identifiers));
     }
     return data;
   },
 
   async logout() {
-    try { await request('/api/login', { action: 'partner_logout' }); } catch (e) { /* ignore */ }
-    for (const k of ['partner_session_token','partner_person_id','partner_name','partner_email']) {
+    const token = await Storage.get('partner_session_token');
+    try { await request('/api/partner-auth', { action: 'logout', token }); } catch (e) { /* ignore */ }
+    for (const k of ['partner_session_token','partner_person_id','partner_name','partner_email','partner_identifiers']) {
       await Storage.remove(k);
     }
   },
@@ -65,21 +85,25 @@ export const Auth = {
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 export const Dashboard = {
-  // Response: { success, person, companies[], identifiers[], scorecard: { merchant_count, volume_30d, volume_90d, volume_mtd, rank, tier } }
+  // Uses validate to get identifiers alongside partner info
   getScorecard(person_id) {
     return request('/api/partners', { action: 'get_scorecard', person_id });
+  },
+
+  // Get cached identifiers from storage (populated on login/validate)
+  async getIdentifiers() {
+    const raw = await Storage.get('partner_identifiers');
+    try { return raw ? JSON.parse(raw) : []; }
+    catch (e) { return []; }
   },
 };
 
 // ── MERCHANTS ─────────────────────────────────────────────────────────────────
 export const Merchants = {
-  // Get merchants for a specific agent identifier.
-  // Response: { success, data: [{ merchant_id, dba_name, account_status, volume_30_day, volume_90_day, volume_mtd, last_batch_date, ... }] }
   getByIdentifier(identifier_id) {
     return request('/api/partners', { action: 'get_merchant_data_raw', identifier_id });
   },
 
-  // Get full merchant detail.
   get(merchant_uuid) {
     return request('/api/merchants', { action: 'get_full_merchant', merchant_uuid });
   },
@@ -87,7 +111,6 @@ export const Merchants = {
 
 // ── TICKETS ───────────────────────────────────────────────────────────────────
 export const Tickets = {
-  // List tickets for authenticated partner. Optional: merchant_uuid to scope.
   list(merchant_uuid) {
     const body = { action: 'list_for_partner' };
     if (merchant_uuid) body.merchant_uuid = merchant_uuid;
@@ -132,12 +155,15 @@ export const Chat = {
 
 // ── PROFILE ───────────────────────────────────────────────────────────────────
 export const Profile = {
-  // Get full person record + identifiers + companies.
   get(person_id) {
     return request('/api/partners', { action: 'get_scorecard', person_id });
   },
 
   updateField(id, field, value) {
     return request('/api/partners', { action: 'update_person_field', id, field, value });
+  },
+
+  changePassword(token, current_password, new_password) {
+    return request('/api/partner-auth', { action: 'change_password', token, current_password, new_password });
   },
 };

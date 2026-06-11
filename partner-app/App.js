@@ -12,12 +12,12 @@ export default function App() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    Auth.getSession().then(session => {
-      if (session?.token && session?.person_id) {
-        setPerson({ id: session.person_id, full_name: session.name, email: session.email });
+    Auth.validate().then(res => {
+      if (res?.success && res?.partner) {
+        setPerson(res.partner);
       }
       setChecking(false);
-    });
+    }).catch(() => setChecking(false));
   }, []);
 
   if (checking) {

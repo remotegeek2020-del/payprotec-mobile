@@ -21,7 +21,7 @@ export default function LoginScreen({ onLogin }) {
     try {
       const res = await Auth.login(email.trim().toLowerCase(), password);
       if (res.success) {
-        onLogin(res.person);
+        onLogin(res.partner);
       } else {
         Alert.alert('Login Failed', res.error || res.message || res.reason || JSON.stringify(res));
       }

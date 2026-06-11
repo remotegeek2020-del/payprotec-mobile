@@ -30,7 +30,7 @@ export default function DashboardScreen({ navigation, person }) {
   const [scorecard, setScorecard] = useState(null);
   const [loading, setLoading]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [name, setName]           = useState(person?.full_name || '');
+  const [name, setName]           = useState(person?.name || person?.full_name || '');
 
   async function load() {
     setLoading(true);
