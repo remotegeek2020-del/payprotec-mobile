@@ -812,20 +812,21 @@ export default function PartnersScreen() {
         const compById = {};
         cArr.forEach(c => { compById[c.id] = c; });
 
-        // Build identifiers-per-agent lookup
+        // Build identifiers-per-agent lookup (agent_identifiers.agent_id → agents.id)
         const identByAgent = {};
         iArr.forEach(i => {
-          const key = i.agent_id ?? i.agentId;
+          const key = i.agent_id;
           if (key == null) return;
           if (!identByAgent[key]) identByAgent[key] = [];
           identByAgent[key].push(i);
         });
 
-        // Build agents-per-person map, enriched with company name and identifiers
+        // Build agents-per-person map.
+        // agents.parent_agent_id is the FK to persons.id (despite the confusing name).
         const byPerson = {};
         aArr.forEach(a => {
-          const pid = a.person_id ?? a.personId;
-          const aid = a.id ?? a.agent_id ?? a.agentId;
+          const pid = a.parent_agent_id; // FK to persons.id
+          const aid = a.id;              // agents.id, referenced by agent_identifiers.agent_id
           if (pid == null) return;
           if (!byPerson[pid]) byPerson[pid] = [];
           byPerson[pid].push({
