@@ -7,6 +7,7 @@ import { COLORS } from '../config';
 import DashboardScreen  from '../screens/DashboardScreen';
 import MerchantsScreen  from '../screens/MerchantsScreen';
 import TicketsScreen    from '../screens/TicketsScreen';
+import CommunityScreen  from '../screens/CommunityScreen';
 import MessagesScreen   from '../screens/MessagesScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
 
@@ -51,6 +52,12 @@ function TabNavigator({ person, onLogout }) {
         name="Tickets"
         component={TicketsScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon icon="🎫" focused={focused} />, tabBarLabel: 'Tickets' }}
+      />
+
+      <Tab.Screen
+        name="Community"
+        component={CommunityScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="🌐" focused={focused} />, tabBarLabel: 'Community' }}
       />
 
       <Tab.Screen

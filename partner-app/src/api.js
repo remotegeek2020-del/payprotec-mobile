@@ -138,6 +138,35 @@ export const Tickets = {
   },
 };
 
+// ── COMMUNITY ─────────────────────────────────────────────────────────────────
+export const Community = {
+  getChannels() {
+    return request('/api/community', { action: 'get_channels' });
+  },
+  getFeed({ channel_id, page = 0, limit = 20 } = {}) {
+    const body = { action: 'get_feed', page, limit };
+    if (channel_id) body.channel_id = channel_id;
+    return request('/api/community', body);
+  },
+  async createPost(channel_id, body) {
+    const partner_id   = await Storage.get('partner_person_id');
+    const partner_name = await Storage.get('partner_name');
+    return request('/api/community', { action: 'create_post', body, channel_id, partner_id, partner_name });
+  },
+  async react(post_id, emoji = '👍') {
+    const partner_id = await Storage.get('partner_person_id');
+    return request('/api/community', { action: 'react', post_id, emoji, partner_id });
+  },
+  getComments(post_id) {
+    return request('/api/community', { action: 'get_comments', post_id });
+  },
+  async addComment(post_id, body) {
+    const partner_id   = await Storage.get('partner_person_id');
+    const partner_name = await Storage.get('partner_name');
+    return request('/api/community', { action: 'add_comment', post_id, body, partner_id, partner_name });
+  },
+};
+
 // ── MESSAGES ──────────────────────────────────────────────────────────────────
 export const Chat = {
   getUserList() {
