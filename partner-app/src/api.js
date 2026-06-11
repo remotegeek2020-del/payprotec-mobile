@@ -25,7 +25,13 @@ async function request(path, body) {
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 export const Auth = {
   async login(email, password) {
-    const data = await request('/api/partner-login', { action: 'login', email, password });
+    // Try /api/partner-login first; fallback action name partner_login
+    let data;
+    try {
+      data = await request('/api/partner-login', { email, password });
+    } catch (e) {
+      data = await request('/api/login', { action: 'partner_login', email, password });
+    }
     if (data.success && data.sessionToken) {
       await Storage.set('partner_session_token', data.sessionToken);
       const p = data.person || {};

@@ -26,7 +26,8 @@ export default function LoginScreen({ onLogin }) {
         Alert.alert('Login Failed', res.error || res.message || 'Invalid email or password.');
       }
     } catch (e) {
-      Alert.alert('Error', 'Could not connect. Check your internet connection.');
+      const msg = e?.message || JSON.stringify(e) || 'Unknown error';
+      Alert.alert('Error', `Login failed: ${msg}`);
     }
     setLoading(false);
   }
