@@ -393,6 +393,12 @@ export const Partners = {
   getAllAgents() {
     return request('/api/partners', { action: 'get_all_agents_for_transfer' });
   },
+  // Complete unfiltered roster — every person record, plus agents/identifiers/companies.
+  // (The leaderboard only contains partners with merchant activity, so it under-counts.)
+  // Response: { success, data: { persons[], agents[], identifiers[], companies[] } }
+  getList() {
+    return request('/api/partners', { action: 'get_partners_list' });
+  },
 };
 
 // ── COMMUNITY ─────────────────────────────────────────────────────────────────

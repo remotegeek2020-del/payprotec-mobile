@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal, ScrollView,
+  ActivityIndicator, RefreshControl, Modal, ScrollView, TextInput,
 } from 'react-native';
 import { COLORS } from '../config';
 import { Partners } from '../api';
@@ -149,20 +149,50 @@ function ScorecardModal({ agent, visible, onClose }) {
   );
 }
 
+function PersonRow({ item }) {
+  return (
+    <View style={s.personRow}>
+      <View style={s.personAvatar}>
+        <Text style={s.personAvatarText}>
+          {(item.full_name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+        </Text>
+      </View>
+      <View style={{ flex: 1, marginLeft: 10 }}>
+        <Text style={s.personName} numberOfLines={1}>{item.full_name || '—'}</Text>
+        {item.email ? <Text style={s.personEmail} numberOfLines={1}>{item.email}</Text> : null}
+      </View>
+      {item.phone_number ? <Text style={s.personPhone}>{item.phone_number}</Text> : null}
+    </View>
+  );
+}
+
 export default function PartnersScreen() {
+  const [view, setView]           = useState('ranked'); // 'ranked' | 'all'
   const [agents, setAgents]       = useState([]);
+  const [persons, setPersons]     = useState([]);
+  const [personQuery, setPersonQuery] = useState('');
   const [loading, setLoading]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected]   = useState(null);
-  const [totalCount, setTotalCount] = useState(0);
+  const [rankedCount, setRankedCount] = useState('—');
+  const [allCount, setAllCount]   = useState('—');
 
   async function load(refresh = false) {
     if (refresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const d = await Partners.getLeaderboard();
-      setAgents(d.data || []);
-      setTotalCount(d.total ?? (d.data || []).length);
+      const [lb, full] = await Promise.allSettled([
+        Partners.getLeaderboard(),
+        Partners.getList(),
+      ]);
+      if (lb.value) {
+        setAgents(lb.value.data || []);
+        setRankedCount(lb.value.total ?? (lb.value.data || []).length);
+      }
+      if (full.value?.data?.persons) {
+        setPersons(full.value.data.persons);
+        setAllCount(full.value.data.persons.length);
+      }
     } catch {}
     setLoading(false);
     setRefreshing(false);
@@ -170,25 +200,66 @@ export default function PartnersScreen() {
 
   useEffect(() => { load(); }, []);
 
+  const filteredPersons = personQuery.trim()
+    ? persons.filter(p =>
+        (p.full_name || '').toLowerCase().includes(personQuery.trim().toLowerCase()) ||
+        (p.email || '').toLowerCase().includes(personQuery.trim().toLowerCase()))
+    : persons;
+
   return (
     <View style={s.container}>
       <View style={s.metricsRow}>
         <View style={[s.metric, { borderLeftColor: COLORS.primary }]}>
-          <Text style={[s.metricNum, { color: COLORS.primary }]}>{totalCount}</Text>
+          <Text style={[s.metricNum, { color: COLORS.primary }]}>{allCount}</Text>
           <Text style={s.metricLabel}>Total Partners</Text>
+        </View>
+        <View style={[s.metric, { borderLeftColor: COLORS.success }]}>
+          <Text style={[s.metricNum, { color: COLORS.success }]}>{rankedCount}</Text>
+          <Text style={s.metricLabel}>With Activity</Text>
         </View>
       </View>
 
+      {/* View toggle */}
+      <View style={s.tabs}>
+        <TouchableOpacity style={[s.tab, view === 'ranked' && s.tabActive]} onPress={() => setView('ranked')}>
+          <Text style={[s.tabText, view === 'ranked' && s.tabTextActive]}>Leaderboard</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.tab, view === 'all' && s.tabActive]} onPress={() => setView('all')}>
+          <Text style={[s.tabText, view === 'all' && s.tabTextActive]}>All Partners</Text>
+        </TouchableOpacity>
+      </View>
+
+      {view === 'all' && (
+        <View style={s.searchWrap}>
+          <TextInput
+            style={s.searchInput}
+            placeholder="Search by name or email…"
+            placeholderTextColor={COLORS.light}
+            value={personQuery}
+            onChangeText={setPersonQuery}
+          />
+        </View>
+      )}
+
       {loading
         ? <ActivityIndicator color={COLORS.primary} style={{ margin: 32 }} />
-        : <FlatList
-            data={agents}
-            keyExtractor={item => String(item.person_id || item.agent_id)}
-            renderItem={({ item }) => <AgentCard item={item} onPress={setSelected} />}
-            contentContainerStyle={s.list}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.primary} />}
-            ListEmptyComponent={<Text style={s.empty}>No partners found</Text>}
-          />
+        : view === 'ranked'
+          ? <FlatList
+              data={agents}
+              keyExtractor={item => String(item.person_id || item.agent_id)}
+              renderItem={({ item }) => <AgentCard item={item} onPress={setSelected} />}
+              contentContainerStyle={s.list}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.primary} />}
+              ListEmptyComponent={<Text style={s.empty}>No partners found</Text>}
+            />
+          : <FlatList
+              data={filteredPersons}
+              keyExtractor={(item, i) => String(item.id || i)}
+              renderItem={({ item }) => <PersonRow item={item} />}
+              contentContainerStyle={s.list}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.primary} />}
+              ListEmptyComponent={<Text style={s.empty}>No partners found</Text>}
+            />
       }
 
       <ScorecardModal
@@ -229,4 +300,17 @@ const s = StyleSheet.create({
   metaLabel:   { fontSize: 13, color: COLORS.muted, fontWeight: '500' },
   metaValue:   { fontSize: 13, color: COLORS.text, fontWeight: '700', maxWidth: '55%', textAlign: 'right' },
   sectionTitle:{ fontSize: 11, fontWeight: '800', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 16, marginBottom: 4 },
+  tabs:        { flexDirection: 'row', marginHorizontal: 14, marginTop: 10, backgroundColor: COLORS.card, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden' },
+  tab:         { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  tabActive:   { backgroundColor: COLORS.primary },
+  tabText:     { fontSize: 13, fontWeight: '700', color: COLORS.muted },
+  tabTextActive: { color: '#fff' },
+  searchWrap:  { paddingHorizontal: 14, paddingTop: 10 },
+  searchInput: { backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 11, fontSize: 14, color: COLORS.text },
+  personRow:   { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.card, borderRadius: 12, padding: 12, marginBottom: 8 },
+  personAvatar:     { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  personAvatarText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  personName:  { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  personEmail: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
+  personPhone: { fontSize: 11, color: COLORS.light, marginLeft: 8 },
 });
