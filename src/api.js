@@ -259,6 +259,12 @@ export const Tickets = {
   getUnreadTotal() {
     return request('/api/tickets', { action: 'get_unread_total' });
   },
+  // Staff-side ticket list. All filters optional: status, type, limit,
+  // merchant_id, person_id (filter tickets belonging to one partner).
+  // Response: { success, data: ticket[] }
+  listForStaff(filters = {}) {
+    return request('/api/tickets', { action: 'list_for_staff', ...filters });
+  },
 };
 
 // ── EQUIPMENTS ────────────────────────────────────────────────────────────────
@@ -444,6 +450,30 @@ export const Partners = {
   // Response: { success, data: [{id, company_name}] }
   getCompanies() {
     return request('/api/partners', { action: 'get_companies' });
+  },
+  // Partner notes (mirrors GHL notes when hl_contact_id given).
+  // Response: { success, data: [{id, ghl_note_id, title, body, author_name, created_at, is_pinned, source}] }
+  getNotes(person_id, hl_contact_id) {
+    return request('/api/partners', { action: 'get_notes', person_id, hl_contact_id });
+  },
+  // Required: person_id, body. Optional: title, hl_contact_id (syncs note to GHL).
+  async addNote(person_id, body, { title, hl_contact_id } = {}) {
+    const author_name = await Storage.get('user_name');
+    return request('/api/partners', { action: 'add_note', person_id, body, title, author_name, hl_contact_id });
+  },
+  // Required: note_id. Optional: body, title, is_pinned, hl_contact_id.
+  updateNote(note_id, patch = {}) {
+    return request('/api/partners', { action: 'update_note', note_id, ...patch });
+  },
+  deleteNote(note_id, hl_contact_id) {
+    return request('/api/partners', { action: 'delete_note', note_id, hl_contact_id });
+  },
+  // Merchants tied to one identifier (agent ID).
+  // Response: { success, data: [{merchant_id, dba_name, account_status, enrollment_date,
+  //             volume_30_day, volume_90_day, volume_mtd, last_batch_date,
+  //             merchant_city, merchant_state, merchant_phone, email}], total }
+  getIdentifierMerchants(identifier_id) {
+    return request('/api/partners', { action: 'get_merchant_data_raw', identifier_id });
   },
 };
 

@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Modal, ScrollView, TextInput, Alert,
 } from 'react-native';
 import { COLORS } from '../config';
-import { Partners } from '../api';
+import { Partners, Tickets } from '../api';
 
 const TIER_COLORS = {
   gold:     { bg: '#fef3c7', text: '#d97706' },
@@ -321,7 +321,20 @@ function ScorecardModal({ agent, visible, onClose }) {
 }
 
 // ── Partner detail modal (All Partners → tap) ─────────────────────────────────
-// Two tabs: Info (edit name/email/phone) and Agents & IDs (per-company, per-identifier).
+// Mirrors the web app's partner profile: Info (incl. GHL/portal/branded),
+// Agents & IDs (with nested sub-IDs), Merchants per ID, Notes, Tickets.
+
+const STATUS_COLORS = {
+  open:        '#2563eb',
+  in_progress: '#d97706',
+  resolved:    '#16a34a',
+  closed:      '#64748b',
+};
+
+function fmtDate(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString(); } catch { return String(d); }
+}
 
 function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
   const [tab, setTab]       = useState('info');
@@ -331,15 +344,66 @@ function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [localAgents, setLocalAgents] = useState([]);
 
+  // Notes
+  const [notes, setNotes]           = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [noteBody, setNoteBody]     = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+
+  // Tickets
+  const [tickets, setTickets]             = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+
+  // Merchants per identifier
+  const [merchIdent, setMerchIdent]     = useState(null);
+  const [merchants, setMerchants]       = useState([]);
+  const [merchantsLoading, setMerchantsLoading] = useState(false);
+
   useEffect(() => {
     if (visible && person) {
       setName(person.full_name || '');
       setEmail(person.email || '');
       setPhone(person.phone_number || '');
       setTab('info');
+      setNotes([]); setNoteBody('');
+      setTickets([]);
+      setMerchIdent(null); setMerchants([]);
     }
     setLocalAgents(agentRows || []);
   }, [visible, person, agentRows]);
+
+  // Lazy-load notes / tickets when their tab is first opened
+  useEffect(() => {
+    if (!visible || !person) return;
+    if (tab === 'notes' && notes.length === 0 && !notesLoading) {
+      setNotesLoading(true);
+      Partners.getNotes(person.id, person.hl_contact_id)
+        .then(d => setNotes(d?.data || []))
+        .catch(() => {})
+        .finally(() => setNotesLoading(false));
+    }
+    if (tab === 'tickets' && tickets.length === 0 && !ticketsLoading) {
+      setTicketsLoading(true);
+      Tickets.listForStaff({ person_id: person.id, limit: 50 })
+        .then(d => setTickets(d?.data || []))
+        .catch(() => {})
+        .finally(() => setTicketsLoading(false));
+    }
+  }, [tab, visible, person]);
+
+  // Flatten all identifiers across agents (for Merchants tab chips)
+  const allIdents = localAgents.flatMap(a =>
+    (a.identifiers || []).map(i => ({ ...i, company_name: a.company_name })));
+
+  function loadMerchants(ident) {
+    setMerchIdent(ident);
+    setMerchantsLoading(true);
+    setMerchants([]);
+    Partners.getIdentifierMerchants(ident.id)
+      .then(d => setMerchants(d?.data || []))
+      .catch(() => {})
+      .finally(() => setMerchantsLoading(false));
+  }
 
   async function saveInfo() {
     if (!person) return;
@@ -364,6 +428,42 @@ function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
     }
   }
 
+  async function addNote() {
+    if (!noteBody.trim()) return;
+    setNoteSaving(true);
+    try {
+      const res = await Partners.addNote(person.id, noteBody.trim(), { hl_contact_id: person.hl_contact_id });
+      if (res?.success) {
+        setNoteBody('');
+        const d = await Partners.getNotes(person.id, person.hl_contact_id);
+        setNotes(d?.data || []);
+      } else {
+        Alert.alert('Error', res?.message || 'Failed to add note.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to add note.');
+    }
+    setNoteSaving(false);
+  }
+
+  async function togglePin(note) {
+    const res = await Partners.updateNote(note.id, { is_pinned: !note.is_pinned, hl_contact_id: person.hl_contact_id });
+    if (res?.success) {
+      setNotes(prev => prev.map(n => n.id === note.id ? { ...n, is_pinned: !note.is_pinned } : n));
+    }
+  }
+
+  function deleteNote(note) {
+    Alert.alert('Delete Note', 'Delete this note?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        const res = await Partners.deleteNote(note.id, person.hl_contact_id);
+        if (res?.success) setNotes(prev => prev.filter(n => n.id !== note.id));
+        else Alert.alert('Error', res?.message || 'Failed to delete note.');
+      }},
+    ]);
+  }
+
   function onIdentSaved(agentId, updated) {
     setLocalAgents(prev => prev.map(a => a.agent_id !== agentId ? a : {
       ...a,
@@ -372,6 +472,10 @@ function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
   }
 
   if (!person) return null;
+
+  const sortedNotes = [...notes].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0));
+
+  const TABS = [['info', 'Info'], ['ids', 'IDs'], ['merchants', 'Merchants'], ['notes', 'Notes'], ['tickets', 'Tickets']];
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -385,16 +489,30 @@ function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
           </View>
 
           <View style={[s.tabs, { marginHorizontal: 0, marginTop: 0, marginBottom: 12 }]}>
-            <TouchableOpacity style={[s.tab, tab === 'info' && s.tabActive]} onPress={() => setTab('info')}>
-              <Text style={[s.tabText, tab === 'info' && s.tabTextActive]}>Info</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.tab, tab === 'ids' && s.tabActive]} onPress={() => setTab('ids')}>
-              <Text style={[s.tabText, tab === 'ids' && s.tabTextActive]}>Agents & IDs</Text>
-            </TouchableOpacity>
+            {TABS.map(([key, label]) => (
+              <TouchableOpacity key={key} style={[s.tab, tab === key && s.tabActive]} onPress={() => setTab(key)}>
+                <Text style={[s.tabTextSm, tab === key && s.tabTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {tab === 'info' ? (
+          {/* ── Info ── */}
+          {tab === 'info' && (
             <ScrollView contentContainerStyle={{ paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
+              {/* Status badges */}
+              <View style={s.badgeRow}>
+                <View style={[s.statusBadge, { backgroundColor: person.is_portal_active ? '#dcfce7' : '#f1f5f9' }]}>
+                  <Text style={[s.statusBadgeText, { color: person.is_portal_active ? '#16a34a' : '#64748b' }]}>
+                    {person.is_portal_active ? '● Portal Active' : '○ Portal Off'}
+                  </Text>
+                </View>
+                {person.is_branded ? (
+                  <View style={[s.statusBadge, { backgroundColor: '#dbeafe' }]}>
+                    <Text style={[s.statusBadgeText, { color: '#2563eb' }]}>🔒 Branded</Text>
+                  </View>
+                ) : null}
+              </View>
+
               <Text style={s.fieldLabel}>Full Name</Text>
               <TextInput style={s.input} value={name} onChangeText={setName}
                 placeholder="Full name" placeholderTextColor={COLORS.light} />
@@ -406,36 +524,200 @@ function PartnerDetailModal({ person, agentRows, visible, onClose, onSaved }) {
               <TextInput style={s.input} value={phone} onChangeText={setPhone}
                 placeholder="Phone number" placeholderTextColor={COLORS.light}
                 keyboardType="phone-pad" />
+
+              <Text style={s.sectionTitle}>Details</Text>
+              {[
+                ['Enrolled', fmtDate(person.enrolled_at)],
+                ['GHL Contact ID', person.hl_contact_id || 'Not linked'],
+                ['Last Portal Login', fmtDate(person.last_portal_login)],
+                ['Portal Password Set', person.portal_password_set ? 'Yes' : 'No'],
+              ].map(([label, val]) => (
+                <View key={label} style={s.metaRow}>
+                  <Text style={s.metaLabel}>{label}</Text>
+                  <Text style={s.metaValue} numberOfLines={1}>{val}</Text>
+                </View>
+              ))}
+
               <TouchableOpacity style={s.primaryBtn} onPress={saveInfo} disabled={saving}>
                 {saving
                   ? <ActivityIndicator color="#fff" />
                   : <Text style={s.primaryBtnText}>Save Changes</Text>}
               </TouchableOpacity>
             </ScrollView>
-          ) : (
+          )}
+
+          {/* ── Agents & IDs (with nested sub-IDs) ── */}
+          {tab === 'ids' && (
             <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
               {localAgents.length === 0 ? (
                 <Text style={s.empty}>No agent records for this person</Text>
-              ) : localAgents.map((ag, idx) => (
-                <View key={String(ag.agent_id ?? idx)} style={s.agentBlock}>
-                  <View style={s.agentBlockHeader}>
-                    <View style={s.agentCompanyLabel}>
-                      <Text style={s.agentBlockCompany} numberOfLines={1}>
-                        {ag.company_name || 'Independent'}
+              ) : localAgents.map((ag, idx) => {
+                const idents   = ag.identifiers || [];
+                const identIds = new Set(idents.map(i => i.id));
+                // Top-level: no parent, or parent belongs to a different agent
+                const tops = idents.filter(i => !i.parent_config_id || !identIds.has(i.parent_config_id));
+                const subsByParent = {};
+                idents.forEach(i => {
+                  if (i.parent_config_id && identIds.has(i.parent_config_id)) {
+                    (subsByParent[i.parent_config_id] ||= []).push(i);
+                  }
+                });
+                return (
+                  <View key={String(ag.agent_id ?? idx)} style={s.agentBlock}>
+                    <Text style={s.agentBlockCompany} numberOfLines={1}>
+                      {ag.company_name || 'Independent'}
+                    </Text>
+                    {idents.length === 0 ? (
+                      <Text style={s.identNote}>No agent IDs assigned</Text>
+                    ) : tops.map(ident => (
+                      <View key={String(ident.id)}>
+                        <IdentifierRow
+                          ident={ident}
+                          onSaved={updated => onIdentSaved(ag.agent_id, updated)}
+                        />
+                        {(subsByParent[ident.id] || []).map(sub => (
+                          <View key={String(sub.id)} style={s.subIdentWrap}>
+                            <Text style={s.subIdentLabel}>↳ sub-partner</Text>
+                            <IdentifierRow
+                              ident={sub}
+                              onSaved={updated => onIdentSaved(ag.agent_id, updated)}
+                            />
+                          </View>
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* ── Merchants per identifier ── */}
+          {tab === 'merchants' && (
+            <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
+              {allIdents.length === 0 ? (
+                <Text style={s.empty}>No agent IDs — no merchants to show</Text>
+              ) : (
+                <>
+                  <Text style={s.fieldLabel}>Select an agent ID</Text>
+                  <View style={s.idBadgesRow}>
+                    {allIdents.map(ident => (
+                      <TouchableOpacity
+                        key={String(ident.id)}
+                        style={[s.chip, merchIdent?.id === ident.id && s.chipActive]}
+                        onPress={() => loadMerchants(ident)}
+                      >
+                        <Text style={[s.chipText, merchIdent?.id === ident.id && s.chipTextActive]}>
+                          {ident.id_string}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {merchantsLoading && <ActivityIndicator color={COLORS.primary} style={{ margin: 20 }} />}
+
+                  {merchIdent && !merchantsLoading && (
+                    merchants.length === 0
+                      ? <Text style={s.empty}>No merchants under {merchIdent.id_string}</Text>
+                      : merchants.map((m, i) => (
+                        <View key={String(m.merchant_id ?? i)} style={s.merchRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.agentName} numberOfLines={1}>{m.dba_name || m.merchant_id}</Text>
+                            <Text style={s.subLine}>
+                              {[m.merchant_city, m.merchant_state].filter(Boolean).join(', ') || '—'}
+                              {m.account_status ? `  ·  ${m.account_status}` : ''}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={s.statNum}>{fmt$(m.volume_30_day)}</Text>
+                            <Text style={s.statLabel}>30-day</Text>
+                          </View>
+                        </View>
+                      ))
+                  )}
+                </>
+              )}
+            </ScrollView>
+          )}
+
+          {/* ── Notes ── */}
+          {tab === 'notes' && (
+            <ScrollView contentContainerStyle={{ paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+                <TextInput
+                  style={[s.input, { flex: 1, marginBottom: 0, minHeight: 44 }]}
+                  value={noteBody}
+                  onChangeText={setNoteBody}
+                  placeholder="Write a note…"
+                  placeholderTextColor={COLORS.light}
+                  multiline
+                />
+                <TouchableOpacity style={[s.smallBtn, s.smallBtnPrimary, { height: 44 }]} onPress={addNote} disabled={noteSaving}>
+                  {noteSaving
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={[s.smallBtnText, { color: '#fff' }]}>Add</Text>}
+                </TouchableOpacity>
+              </View>
+              {person.hl_contact_id ? (
+                <Text style={s.identNote}>Notes sync with GoHighLevel contact.</Text>
+              ) : null}
+
+              {notesLoading && <ActivityIndicator color={COLORS.primary} style={{ margin: 20 }} />}
+              {!notesLoading && sortedNotes.length === 0 && <Text style={s.empty}>No notes yet</Text>}
+              {sortedNotes.map(n => (
+                <View key={String(n.id)} style={[s.noteCard, n.is_pinned && s.noteCardPinned]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {n.is_pinned ? <Text style={{ fontSize: 11 }}>📌 </Text> : null}
+                    {n.title ? <Text style={s.agentName} numberOfLines={1}>{n.title}</Text> : null}
+                    <View style={{ flex: 1 }} />
+                    {n.source === 'ghl' ? (
+                      <View style={s.ghlBadge}><Text style={s.ghlBadgeText}>GHL</Text></View>
+                    ) : null}
+                  </View>
+                  <Text style={s.noteBody}>{n.body}</Text>
+                  <View style={s.noteFooter}>
+                    <Text style={s.subLine}>
+                      {n.author_name ? `${n.author_name} · ` : ''}{fmtDate(n.created_at)}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <TouchableOpacity onPress={() => togglePin(n)}>
+                        <Text style={s.noteAction}>{n.is_pinned ? 'Unpin' : 'Pin'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => deleteNote(n)}>
+                        <Text style={[s.noteAction, { color: COLORS.danger }]}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          {/* ── Tickets ── */}
+          {tab === 'tickets' && (
+            <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
+              {ticketsLoading && <ActivityIndicator color={COLORS.primary} style={{ margin: 20 }} />}
+              {!ticketsLoading && tickets.length === 0 && <Text style={s.empty}>No tickets for this partner</Text>}
+              {tickets.map(t => {
+                const stColor = STATUS_COLORS[(t.status || '').toLowerCase()] || COLORS.muted;
+                return (
+                  <View key={String(t.id)} style={s.merchRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.agentName} numberOfLines={1}>
+                        #{t.ticket_number ?? t.id}  {t.subject || '—'}
+                      </Text>
+                      <Text style={s.subLine}>
+                        {[t.type, t.category, t.priority].filter(Boolean).join(' · ')} · {fmtDate(t.created_at)}
+                      </Text>
+                    </View>
+                    <View style={[s.statusBadge, { backgroundColor: stColor + '22' }]}>
+                      <Text style={[s.statusBadgeText, { color: stColor }]}>
+                        {(t.status || '—').replace(/_/g, ' ')}
                       </Text>
                     </View>
                   </View>
-                  {(ag.identifiers || []).length === 0 ? (
-                    <Text style={s.identNote}>No agent IDs assigned</Text>
-                  ) : (ag.identifiers || []).map(ident => (
-                    <IdentifierRow
-                      key={String(ident.id)}
-                      ident={ident}
-                      onSaved={updated => onIdentSaved(ag.agent_id, updated)}
-                    />
-                  ))}
-                </View>
-              ))}
+                );
+              })}
             </ScrollView>
           )}
         </View>
@@ -1054,7 +1336,23 @@ const s = StyleSheet.create({
   tab:          { flex: 1, paddingVertical: 10, alignItems: 'center' },
   tabActive:    { backgroundColor: COLORS.primary },
   tabText:      { fontSize: 12, fontWeight: '700', color: COLORS.muted },
+  tabTextSm:    { fontSize: 11, fontWeight: '700', color: COLORS.muted },
   tabTextActive:{ color: '#fff' },
+
+  // Partner detail extras
+  badgeRow:     { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  statusBadge:  { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  statusBadgeText: { fontSize: 11, fontWeight: '800' },
+  subIdentWrap: { marginLeft: 16, borderLeftWidth: 2, borderLeftColor: COLORS.border, paddingLeft: 10 },
+  subIdentLabel:{ fontSize: 10, color: COLORS.light, fontStyle: 'italic', marginTop: 6 },
+  merchRow:     { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.bg, borderRadius: 10, padding: 12, marginTop: 8, borderWidth: 1, borderColor: COLORS.border, gap: 8 },
+  noteCard:     { backgroundColor: COLORS.bg, borderRadius: 10, padding: 12, marginTop: 10, borderWidth: 1, borderColor: COLORS.border },
+  noteCardPinned: { borderColor: COLORS.primary, backgroundColor: '#f0f9ff' },
+  noteBody:     { fontSize: 13, color: COLORS.text, marginTop: 4, lineHeight: 18 },
+  noteFooter:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  noteAction:   { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  ghlBadge:     { backgroundColor: '#ede9fe', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  ghlBadgeText: { fontSize: 9, fontWeight: '800', color: '#7c3aed' },
 
   // Search
   searchWrap:   { paddingHorizontal: 14, paddingTop: 10 },
