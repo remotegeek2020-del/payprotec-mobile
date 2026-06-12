@@ -4,16 +4,36 @@ import {
   TextInput, ActivityIndicator, Alert,
 } from 'react-native';
 import { COLORS } from '../config';
-import { Profile, Auth } from '../api';
+import { Profile, Auth, SubPartners } from '../api';
 import { Storage } from '../storage';
 
-export default function ProfileScreen({ onLogout }) {
+function fmtVol(n) {
+  const num = parseFloat(n);
+  if (isNaN(num)) return '—';
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000)     return `$${(num / 1_000).toFixed(1)}K`;
+  return `$${num.toFixed(0)}`;
+}
+
+export default function ProfileScreen({ navigation, onLogout }) {
   const [person, setPerson]     = useState(null);
   const [loading, setLoading]   = useState(false);
   const [editing, setEditing]   = useState(false);
   const [saving, setSaving]     = useState(false);
   const [form, setForm]         = useState({});
   const [identifiers, setIdentifiers] = useState([]);
+
+  // Sub-partners
+  const [subPartners, setSubPartners]   = useState([]);
+  const [subsLoading, setSubsLoading]   = useState(false);
+  const [expandedSub, setExpandedSub]   = useState(null);   // person_id of expanded sub-partner
+  const [subMerchants, setSubMerchants] = useState({});     // person_id -> merchants[]
+  const [subMerchLoading, setSubMerchLoading] = useState(null);
+
+  // Invite form
+  const [showInvite, setShowInvite]     = useState(false);
+  const [invForm, setInvForm]           = useState({ full_name: '', email: '', agent_id_string: '', rev_share: '', parent_id_string: '' });
+  const [inviting, setInviting]         = useState(false);
 
   async function load() {
     setLoading(true);
@@ -31,7 +51,59 @@ export default function ProfileScreen({ onLogout }) {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadSubPartners() {
+    setSubsLoading(true);
+    try {
+      const res = await SubPartners.list();
+      if (res.success) setSubPartners(res.data || []);
+    } catch (e) { /* ignore */ }
+    setSubsLoading(false);
+  }
+
+  useEffect(() => { load(); loadSubPartners(); }, []);
+
+  async function toggleSubExpand(sub) {
+    if (expandedSub === sub.person_id) { setExpandedSub(null); return; }
+    setExpandedSub(sub.person_id);
+    if (!subMerchants[sub.person_id]) {
+      setSubMerchLoading(sub.person_id);
+      try {
+        const res = await SubPartners.getMerchants(sub.person_id);
+        if (res.success) setSubMerchants(m => ({ ...m, [sub.person_id]: res.data || [] }));
+      } catch (e) { /* ignore */ }
+      setSubMerchLoading(null);
+    }
+  }
+
+  async function sendInvite() {
+    const { full_name, email, agent_id_string, rev_share, parent_id_string } = invForm;
+    const parentId = parent_id_string || identifiers[0]?.id_string || '';
+    if (!full_name.trim() || !email.trim() || !agent_id_string.trim() || !parentId) {
+      Alert.alert('Required', 'Full name, email, Agent ID and a parent Agent ID are required.');
+      return;
+    }
+    setInviting(true);
+    try {
+      const res = await SubPartners.invite({
+        full_name:        full_name.trim(),
+        email:            email.trim().toLowerCase(),
+        agent_id_string:  agent_id_string.trim(),
+        rev_share:        rev_share ? parseFloat(rev_share) : 0,
+        parent_id_string: parentId,
+      });
+      if (res.success) {
+        Alert.alert('Invite Sent', `${full_name.trim()} has been invited. They'll receive an email to set up their portal account.`);
+        setShowInvite(false);
+        setInvForm({ full_name: '', email: '', agent_id_string: '', rev_share: '', parent_id_string: '' });
+        loadSubPartners();
+      } else {
+        Alert.alert('Failed', res.message || res.error || 'Could not send invite.');
+      }
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Could not send invite.');
+    }
+    setInviting(false);
+  }
 
   async function save() {
     setSaving(true);
@@ -149,6 +221,93 @@ export default function ProfileScreen({ onLogout }) {
         </View>
       )}
 
+      {/* Sub-partners */}
+      <View style={s.card}>
+        <View style={s.cardTitleRow}>
+          <Text style={s.sectionTitle}>Sub-Partners</Text>
+          <TouchableOpacity onPress={() => setShowInvite(v => !v)}>
+            <Text style={s.editLink}>{showInvite ? 'Cancel' : '+ Invite'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showInvite && (
+          <View style={s.inviteForm}>
+            <Text style={s.label}>Full Name *</Text>
+            <TextInput style={s.input} value={invForm.full_name} onChangeText={v => setInvForm(f => ({ ...f, full_name: v }))} placeholder="Jane Smith" placeholderTextColor={COLORS.light} />
+            <Text style={s.label}>Email *</Text>
+            <TextInput style={s.input} value={invForm.email} onChangeText={v => setInvForm(f => ({ ...f, email: v }))} placeholder="jane@email.com" placeholderTextColor={COLORS.light} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+            <Text style={s.label}>New Agent ID *</Text>
+            <TextInput style={s.input} value={invForm.agent_id_string} onChangeText={v => setInvForm(f => ({ ...f, agent_id_string: v }))} placeholder="e.g. SUB123" placeholderTextColor={COLORS.light} autoCapitalize="characters" autoCorrect={false} />
+            <Text style={s.label}>Rev Share %</Text>
+            <TextInput style={s.input} value={invForm.rev_share} onChangeText={v => setInvForm(f => ({ ...f, rev_share: v }))} placeholder="0" placeholderTextColor={COLORS.light} keyboardType="decimal-pad" />
+            {identifiers.length > 1 ? (
+              <>
+                <Text style={s.label}>Under Your Agent ID *</Text>
+                <View style={s.parentChips}>
+                  {identifiers.map((id, i) => {
+                    const active = (invForm.parent_id_string || identifiers[0]?.id_string) === id.id_string;
+                    return (
+                      <TouchableOpacity key={id.id || i} style={[s.parentChip, active && s.parentChipActive]} onPress={() => setInvForm(f => ({ ...f, parent_id_string: id.id_string }))}>
+                        <Text style={[s.parentChipText, active && { color: '#fff' }]}>{id.id_string}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+            <TouchableOpacity style={[s.saveBtn, { marginTop: 14 }, inviting && { opacity: 0.6 }]} onPress={sendInvite} disabled={inviting}>
+              {inviting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.saveBtnText}>Send Invite</Text>}
+            </TouchableOpacity>
+            <Text style={s.inviteHint}>They'll receive an email invite to set up their portal account.</Text>
+          </View>
+        )}
+
+        {subsLoading ? (
+          <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 12 }} />
+        ) : subPartners.length === 0 ? (
+          <Text style={s.emptySub}>No sub-partners yet. Invite your first sub-partner to start building your network.</Text>
+        ) : (
+          subPartners.map(sub => (
+            <View key={sub.person_id}>
+              <TouchableOpacity style={s.subRow} onPress={() => toggleSubExpand(sub)} activeOpacity={0.7}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.subName} numberOfLines={1}>{sub.full_name || '—'}</Text>
+                  <Text style={s.subEmail} numberOfLines={1}>{sub.email || '—'}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={s.subCount}>{sub.merchant_count} merchant{sub.merchant_count === 1 ? '' : 's'}</Text>
+                  <Text style={s.subVol}>{fmtVol(sub.volume_30_day)} 30d</Text>
+                </View>
+                <Text style={s.subChevron}>{expandedSub === sub.person_id ? '▾' : '▸'}</Text>
+              </TouchableOpacity>
+              {expandedSub === sub.person_id && (
+                <View style={s.subMerchBox}>
+                  {subMerchLoading === sub.person_id ? (
+                    <ActivityIndicator color={COLORS.primary} size="small" style={{ marginVertical: 8 }} />
+                  ) : (subMerchants[sub.person_id] || []).length === 0 ? (
+                    <Text style={s.emptySub}>No merchants yet.</Text>
+                  ) : (
+                    (subMerchants[sub.person_id] || []).map((m, i) => (
+                      <View key={m.merchant_id || i} style={s.subMerchRow}>
+                        <Text style={s.subMerchName} numberOfLines={1}>{m.dba_name || '—'}</Text>
+                        <Text style={s.subMerchMeta}>{m.account_status || '—'} · {fmtVol(m.volume_30_day)}</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </View>
+          ))
+        )}
+      </View>
+
+      {/* Settings */}
+      <TouchableOpacity style={s.settingsRow} onPress={() => navigation.navigate('Settings')} activeOpacity={0.8}>
+        <Text style={s.settingsIcon}>⚙️</Text>
+        <Text style={s.settingsLabel}>Settings</Text>
+        <Text style={s.settingsChevron}>›</Text>
+      </TouchableOpacity>
+
       {/* Sign out */}
       <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
         <Text style={s.logoutText}>Sign Out</Text>
@@ -188,6 +347,27 @@ const s = StyleSheet.create({
   revShare:     { fontSize: 12, fontWeight: '700', color: COLORS.success },
   primeBadge:   { backgroundColor: '#fef3c7', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
   primeText:    { fontSize: 11, fontWeight: '800', color: '#d97706' },
+  inviteForm:   { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, padding: 12, marginBottom: 12, backgroundColor: COLORS.bg },
+  inviteHint:   { fontSize: 11, color: COLORS.light, textAlign: 'center', marginTop: 10 },
+  parentChips:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
+  parentChip:   { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff' },
+  parentChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  parentChipText:   { fontSize: 12, fontWeight: '700', color: COLORS.muted, fontFamily: 'monospace' },
+  emptySub:     { fontSize: 13, color: COLORS.muted, paddingVertical: 8, lineHeight: 18 },
+  subRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  subName:      { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  subEmail:     { fontSize: 12, color: COLORS.muted, marginTop: 1 },
+  subCount:     { fontSize: 12, fontWeight: '800', color: COLORS.primary },
+  subVol:       { fontSize: 11, color: COLORS.muted, marginTop: 1 },
+  subChevron:   { fontSize: 14, color: COLORS.light, fontWeight: '700' },
+  subMerchBox:  { backgroundColor: COLORS.bg, borderRadius: 10, padding: 10, marginVertical: 6 },
+  subMerchRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, gap: 8 },
+  subMerchName: { flex: 1, fontSize: 13, fontWeight: '600', color: COLORS.text },
+  subMerchMeta: { fontSize: 11, color: COLORS.muted, fontWeight: '600' },
+  settingsRow:  { backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  settingsIcon: { fontSize: 18 },
+  settingsLabel:{ flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.text },
+  settingsChevron: { fontSize: 22, color: COLORS.light, fontWeight: '600' },
   logoutBtn:    { backgroundColor: '#fee2e2', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   logoutText:   { color: COLORS.danger, fontSize: 15, fontWeight: '800' },
 });

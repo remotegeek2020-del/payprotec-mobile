@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Modal,
 } from 'react-native';
 import { COLORS } from '../config';
-import { Dashboard } from '../api';
+import { Dashboard, Notifications } from '../api';
 import { Storage } from '../storage';
 
 function fmt(n) {
@@ -28,18 +28,51 @@ function KpiCard({ label, value, sub }) {
 
 export default function DashboardScreen({ navigation, person }) {
   const [scorecard, setScorecard] = useState(null);
+  const [trends, setTrends]       = useState(null);
+  const [newEnrollments, setNewEnrollments] = useState([]);
+  const [openRmas, setOpenRmas]   = useState(null);
   const [loading, setLoading]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [name, setName]           = useState(person?.name || person?.full_name || '');
 
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount]     = useState(0);
+  const [showNotifs, setShowNotifs]       = useState(false);
+
   async function load() {
     setLoading(true);
     try {
-      const res = await Dashboard.getScorecard();
-      if (res.success) setScorecard(res.scorecard || res);
+      const [res, overview, notifs] = await Promise.all([
+        Dashboard.getScorecard(),
+        // get_dashboard always reports open_rmas: 0 — get_overview has the real count
+        Dashboard.getOverview().catch(() => null),
+        Notifications.get().catch(() => null),
+      ]);
+      if (res.success) {
+        setScorecard(res.scorecard || res);
+        setTrends(res.trends || null);
+        setNewEnrollments(res.newEnrollments || []);
+      }
+      if (overview?.success) setOpenRmas(overview.data?.open_rmas ?? 0);
+      if (notifs?.success) {
+        setNotifications(notifs.notifications || []);
+        setUnreadCount(notifs.unread || 0);
+      }
     } catch (e) { /* ignore */ }
     setLoading(false);
     setRefreshing(false);
+  }
+
+  async function openNotifications() {
+    setShowNotifs(true);
+    if (unreadCount > 0) {
+      try {
+        await Notifications.markRead();
+        setUnreadCount(0);
+        setNotifications(list => list.map(n => ({ ...n, is_read: true })));
+      } catch (e) { /* ignore */ }
+    }
   }
 
   useEffect(() => {
@@ -67,11 +100,21 @@ export default function DashboardScreen({ navigation, person }) {
           <Text style={s.greetSub}>{greeting()},</Text>
           <Text style={s.greetName} numberOfLines={1}>{name || 'Partner'}</Text>
         </View>
-        {sc.tier ? (
-          <View style={[s.tierBadge, { backgroundColor: tierColor(sc.tier) }]}>
-            <Text style={s.tierText}>{sc.tier}</Text>
-          </View>
-        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {sc.tier ? (
+            <View style={[s.tierBadge, { backgroundColor: tierColor(sc.tier) }]}>
+              <Text style={s.tierText}>{sc.tier}</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity style={s.bellBtn} onPress={openNotifications} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={s.bellIcon}>🔔</Text>
+            {unreadCount > 0 && (
+              <View style={s.bellBadge}>
+                <Text style={s.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading && !refreshing
@@ -88,8 +131,44 @@ export default function DashboardScreen({ navigation, person }) {
             <View style={s.kpiRow}>
               <KpiCard label="90-Day Vol" value={fmt(sc.volume_90d || sc.volume_90_day)} />
               <KpiCard label="Rank"       value={sc.rank ? `#${sc.rank}` : '—'} />
-              <KpiCard label="Growth"     value={sc.growth_pct != null ? `${parseFloat(sc.growth_pct).toFixed(1)}%` : '—'} />
+              <KpiCard label="Open RMAs"  value={openRmas != null ? openRmas : (sc.open_rmas ?? '—')} />
             </View>
+
+            {/* Merchant trends */}
+            {trends ? (
+              <>
+                <Text style={s.sectionTitle}>Merchant Trends</Text>
+                <View style={s.trendRow}>
+                  <TrendChip label="Growth"  value={trends.growth}  color="#059669" bg="#d1fae5" />
+                  <TrendChip label="Stable"  value={trends.stable}  color="#1d4ed8" bg="#dbeafe" />
+                  <TrendChip label="At Risk" value={trends.at_risk} color="#dc2626" bg="#fee2e2" />
+                  <TrendChip label="No Data" value={trends.no_data} color="#64748b" bg="#f1f5f9" />
+                </View>
+              </>
+            ) : null}
+
+            {/* New this week */}
+            <Text style={s.sectionTitle}>New This Week</Text>
+            {newEnrollments.length === 0 ? (
+              <View style={s.emptyCard}>
+                <Text style={s.emptyText}>No new enrollments this week</Text>
+              </View>
+            ) : (
+              newEnrollments.map((m, i) => (
+                <View key={m.id || i} style={s.enrollRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.enrollName} numberOfLines={1}>{m.dba_name || '—'}</Text>
+                    <Text style={s.enrollMeta}>
+                      {m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : '—'}
+                      {m.merchant_id ? ` · MID ${m.merchant_id}` : ''}
+                    </Text>
+                  </View>
+                  <View style={s.enrollBadge}>
+                    <Text style={s.enrollBadgeText}>{(m.account_status || 'Pending').toUpperCase()}</Text>
+                  </View>
+                </View>
+              ))
+            )}
 
             {/* Quick actions */}
             <Text style={s.sectionTitle}>Quick Actions</Text>

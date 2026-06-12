@@ -10,6 +10,7 @@ import TicketsScreen    from '../screens/TicketsScreen';
 import CommunityScreen  from '../screens/CommunityScreen';
 import MessagesScreen   from '../screens/MessagesScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
+import SettingsScreen   from '../screens/SettingsScreen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -83,6 +84,16 @@ export default function AppNavigator({ person, onLogout }) {
         <Stack.Screen name="Main">
           {(props) => <TabNavigator {...props} person={person} onLogout={onLogout} />}
         </Stack.Screen>
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{
+            headerShown: true,
+            title: 'Settings',
+            headerTintColor: COLORS.primary,
+            headerTitleStyle: { fontWeight: '800', color: COLORS.text },
+          }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

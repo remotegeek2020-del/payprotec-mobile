@@ -6,11 +6,26 @@ import {
 import { COLORS } from '../config';
 import { Auth } from '../api';
 
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen({ onLogin, onBack }) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      Alert.alert('Email Required', 'Enter your email address first, then tap "Forgot password?".');
+      return;
+    }
+    if (sendingReset) return;
+    setSendingReset(true);
+    try {
+      await Auth.forgotPassword(email);
+    } catch (e) { /* response is intentionally identical either way */ }
+    setSendingReset(false);
+    Alert.alert('Password Reset', 'If that account exists, a reset email has been sent.');
+  }
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -86,10 +101,20 @@ export default function LoginScreen({ onLogin }) {
               : <Text style={s.loginBtnText}>Sign In</Text>}
           </TouchableOpacity>
 
+          <TouchableOpacity style={s.forgotBtn} onPress={handleForgotPassword} disabled={sendingReset}>
+            <Text style={[s.forgotText, sendingReset && { opacity: 0.5 }]}>Forgot password?</Text>
+          </TouchableOpacity>
+
           <Text style={s.hint}>
             Access is by invitation only. Contact your account manager if you need help logging in.
           </Text>
         </View>
+
+        {onBack ? (
+          <TouchableOpacity style={s.backBtn} onPress={onBack}>
+            <Text style={s.backText}>← Back</Text>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -111,5 +136,9 @@ const s = StyleSheet.create({
   eyeText:     { fontSize: 18 },
   loginBtn:    { backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 22 },
   loginBtnText:{ color: '#fff', fontSize: 16, fontWeight: '800' },
-  hint:        { fontSize: 12, color: COLORS.light, textAlign: 'center', marginTop: 18, lineHeight: 17 },
+  forgotBtn:   { alignItems: 'center', marginTop: 14, padding: 4 },
+  forgotText:  { fontSize: 13, color: COLORS.primary, fontWeight: '700' },
+  hint:        { fontSize: 12, color: COLORS.light, textAlign: 'center', marginTop: 14, lineHeight: 17 },
+  backBtn:     { alignItems: 'center', marginTop: 18, padding: 6 },
+  backText:    { fontSize: 14, color: COLORS.muted, fontWeight: '700' },
 });

@@ -84,6 +84,14 @@ export const Auth = {
       email:     await Storage.get('partner_email'),
     };
   },
+
+  // Always responds { success: true } regardless of whether the account exists.
+  forgotPassword(email) {
+    return request('/api/partner-auth', {
+      action: 'forgot_password',
+      email:  email.trim().toLowerCase(),
+    }, { auth: false });
+  },
 };
 
 // ── DASHBOARD (api/partner-data.js) ───────────────────────────────────────────
@@ -109,6 +117,10 @@ export const Dashboard = {
       success: true,
       person: dash.partner,
       identifiers,
+      // trends: { growth, stable, at_risk, no_data, chart[] }
+      trends: dash.trends || null,
+      // new_enrollments this week: [{ id, merchant_id, dba_name, account_status, agent_id, enrollment_date }]
+      newEnrollments: dash.new_enrollments?.data || [],
       scorecard: {
         merchant_count: ov.merchants,
         approved:       ov.approved,
@@ -124,11 +136,28 @@ export const Dashboard = {
     };
   },
 
+  // Real overview numbers (get_dashboard always returns open_rmas: 0; this one is accurate).
+  // Returns: { success, data: { merchants, approved, pending, closed, mtd, vol30, vol90, open_rmas, identifiers[] } }
+  getOverview() {
+    return request('/api/partner-data', { action: 'get_overview' });
+  },
+
   // Get cached identifiers from storage (populated on login/validate)
   async getIdentifiers() {
     const raw = await Storage.get('partner_identifiers');
     try { return raw ? JSON.parse(raw) : []; }
     catch (e) { return []; }
+  },
+};
+
+// ── NOTIFICATIONS (api/partner-data.js) ───────────────────────────────────────
+export const Notifications = {
+  // Returns: { success, notifications: [{ id, type, title, body, actor_name, is_read, created_at, link }], unread }
+  get() {
+    return request('/api/partner-data', { action: 'get_notifications' });
+  },
+  markRead() {
+    return request('/api/partner-data', { action: 'mark_notifications_read' });
   },
 };
 
@@ -146,6 +175,40 @@ export const Merchants = {
   // Full merchant detail: { success, data: { merchant, equipment, legacyEquipment, notes, rmas } }
   get(merchant_uuid) {
     return request('/api/partner-data', { action: 'get_merchant_detail', merchant_uuid });
+  },
+
+  // Add a partner note to a merchant record. Returns: { success }
+  addNote(merchant_uuid, title, body) {
+    return request('/api/partner-data', { action: 'add_note', merchant_uuid, title, body });
+  },
+
+  // Submit an RMA request. NOTE: the backend expects the merchant *string* ID
+  // (merchants.merchant_id), not the uuid. equipment_serial and notes are optional.
+  requestRma({ merchant_id, equipment_serial, reason, notes }) {
+    return request('/api/partner-data', { action: 'request_rma', merchant_id, equipment_serial, reason, notes });
+  },
+};
+
+// ── SUB-PARTNERS (api/partner-data.js) ────────────────────────────────────────
+export const SubPartners = {
+  // Returns: { success, data: [{ person_id, full_name, email, is_portal_active,
+  //   agent_ids: [{ id, id_string, rev_share }], merchant_count, volume_30_day }] }
+  list() {
+    return request('/api/partner-data', { action: 'get_sub_partners' });
+  },
+
+  // Returns: { success, data: [{ merchant_id, dba_name, account_status, volume_30_day, enrollment_date }] }
+  getMerchants(sub_person_id) {
+    return request('/api/partner-data', { action: 'get_sub_partner_merchants', sub_person_id });
+  },
+
+  // Backend requires email, full_name, agent_id_string and a parent identifier;
+  // we pass parent_id_string and the server resolves it to the identifier UUID.
+  invite({ email, full_name, agent_id_string, rev_share, parent_id_string }) {
+    return request('/api/partner-data', {
+      action: 'invite_sub_partner',
+      email, full_name, agent_id_string, rev_share, parent_id_string,
+    });
   },
 };
 
