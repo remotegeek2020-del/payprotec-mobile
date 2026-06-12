@@ -49,7 +49,7 @@ function PostCard({ item, onOpen }) {
   );
 }
 
-function PostDetailModal({ post, visible, onClose }) {
+function PostDetailModal({ post, visible, onClose, api }) {
   const [comments, setComments]     = useState([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -62,7 +62,7 @@ function PostDetailModal({ post, visible, onClose }) {
       setLoadingComments(true);
       setReacted(post.liked_by_me || false);
       setReactionCount(post.reaction_count || 0);
-      Community.getComments(post.id)
+      api.getComments(post.id)
         .then(d => setComments(d.data || []))
         .catch(() => {})
         .finally(() => setLoadingComments(false));
@@ -73,7 +73,7 @@ function PostDetailModal({ post, visible, onClose }) {
 
   async function handleReact() {
     try {
-      const res = await Community.react(post.id);
+      const res = await api.react(post.id);
       setReacted(res.action === 'added');
       setReactionCount(res.count ?? reactionCount);
     } catch {}
@@ -84,7 +84,7 @@ function PostDetailModal({ post, visible, onClose }) {
     if (!text || posting) return;
     setPosting(true);
     try {
-      await Community.addComment(post.id, text);
+      await api.addComment(post.id, text);
       setComments(prev => [...prev, { body: text, author_name: 'You', created_at: new Date().toISOString() }]);
       setCommentText('');
     } catch {}
@@ -155,7 +155,7 @@ function PostDetailModal({ post, visible, onClose }) {
   );
 }
 
-function CreatePostModal({ visible, channels, onClose, onCreated }) {
+function CreatePostModal({ visible, channels, onClose, onCreated, api }) {
   const [body, setBody]           = useState('');
   const [channelId, setChannelId] = useState(null);
   const [saving, setSaving]       = useState(false);
@@ -170,7 +170,7 @@ function CreatePostModal({ visible, channels, onClose, onCreated }) {
     if (!body.trim() || !channelId || saving) return;
     setSaving(true);
     try {
-      await Community.createPost(channelId, body.trim());
+      await api.createPost(channelId, body.trim());
       reset();
       onClose();
       onCreated();
@@ -233,7 +233,9 @@ function CreatePostModal({ visible, channels, onClose, onCreated }) {
   );
 }
 
-export default function CommunityScreen() {
+// `api` is injectable so the Staff Console can reuse this screen with
+// staff-authenticated community calls (see staff/StaffCommunityScreen.js).
+export default function CommunityScreen({ api = Community }) {
   const [posts, setPosts]         = useState([]);
   const [channels, setChannels]   = useState([]);
   const [activeChannel, setActiveChannel] = useState(null);
@@ -246,7 +248,7 @@ export default function CommunityScreen() {
 
   async function loadChannels() {
     try {
-      const d = await Community.getChannels();
+      const d = await api.getChannels();
       const ch = d.data || [];
       setChannels(ch);
       if (ch.length && !activeChannel) setActiveChannel(ch[0].id);
@@ -256,7 +258,7 @@ export default function CommunityScreen() {
   async function loadPosts(channelId = activeChannel, pg = 0, append = false) {
     if (pg === 0) setLoading(true);
     try {
-      const d = await Community.getFeed({ channel_id: channelId, page: pg, limit: 20 });
+      const d = await api.getFeed({ channel_id: channelId, page: pg, limit: 20 });
       const rows = d.data || [];
       setPosts(append ? prev => [...prev, ...rows] : rows);
       setHasMore(d.has_more || false);
@@ -310,12 +312,13 @@ export default function CommunityScreen() {
         <Text style={s.fabText}>+</Text>
       </TouchableOpacity>
 
-      <PostDetailModal post={selected} visible={!!selected} onClose={() => setSelected(null)} />
+      <PostDetailModal post={selected} visible={!!selected} onClose={() => setSelected(null)} api={api} />
       <CreatePostModal
         visible={showCreate}
         channels={channels}
         onClose={() => setShowCreate(false)}
         onCreated={() => loadPosts(activeChannel, 0, false)}
+        api={api}
       />
     </View>
   );
