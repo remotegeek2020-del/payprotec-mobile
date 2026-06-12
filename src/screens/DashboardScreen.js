@@ -196,7 +196,46 @@ export default function DashboardScreen({ navigation, person }) {
           </>
         )
       }
+
+      {/* Notifications modal */}
+      <Modal visible={showNotifs} animationType="slide" transparent onRequestClose={() => setShowNotifs(false)}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Notifications</Text>
+              <TouchableOpacity onPress={() => setShowNotifs(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={s.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+              {notifications.length === 0 ? (
+                <Text style={s.emptyText}>No notifications yet</Text>
+              ) : (
+                notifications.map((n, i) => (
+                  <View key={n.id || i} style={[s.notifRow, !n.is_read && s.notifUnread]}>
+                    <Text style={s.notifTitle}>{n.title || n.type || 'Notification'}</Text>
+                    {n.body ? <Text style={s.notifBody}>{n.body}</Text> : null}
+                    <Text style={s.notifMeta}>
+                      {n.actor_name ? `${n.actor_name} · ` : ''}
+                      {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
+  );
+}
+
+function TrendChip({ label, value, color, bg }) {
+  return (
+    <View style={[s.trendChip, { backgroundColor: bg }]}>
+      <Text style={[s.trendValue, { color }]}>{value ?? 0}</Text>
+      <Text style={[s.trendLabel, { color }]}>{label}</Text>
+    </View>
   );
 }
 
@@ -238,4 +277,33 @@ const s = StyleSheet.create({
   companyRow:   { backgroundColor: COLORS.card, borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   companyName:  { fontSize: 14, fontWeight: '700', color: COLORS.text },
   companyMeta:  { fontSize: 12, color: COLORS.muted, fontWeight: '600' },
+  // Notifications bell
+  bellBtn:      { position: 'relative', padding: 4 },
+  bellIcon:     { fontSize: 22 },
+  bellBadge:    { position: 'absolute', top: -2, right: -4, backgroundColor: COLORS.danger, borderRadius: 9, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  bellBadgeText:{ color: '#fff', fontSize: 10, fontWeight: '800' },
+  // Trends
+  trendRow:     { flexDirection: 'row', gap: 8 },
+  trendChip:    { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  trendValue:   { fontSize: 18, fontWeight: '900' },
+  trendLabel:   { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', marginTop: 2 },
+  // New enrollments
+  emptyCard:    { backgroundColor: COLORS.card, borderRadius: 12, padding: 16, alignItems: 'center' },
+  emptyText:    { fontSize: 13, color: COLORS.muted, textAlign: 'center', padding: 8 },
+  enrollRow:    { backgroundColor: COLORS.card, borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  enrollName:   { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  enrollMeta:   { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  enrollBadge:  { backgroundColor: '#dbeafe', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  enrollBadgeText: { fontSize: 10, fontWeight: '800', color: '#1d4ed8' },
+  // Notifications modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalCard:    { backgroundColor: COLORS.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '75%' },
+  modalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  modalTitle:   { fontSize: 18, fontWeight: '900', color: COLORS.text },
+  modalClose:   { fontSize: 18, color: COLORS.muted, fontWeight: '700' },
+  notifRow:     { backgroundColor: COLORS.bg, borderRadius: 12, padding: 12, marginBottom: 8 },
+  notifUnread:  { borderLeftWidth: 3, borderLeftColor: COLORS.primary },
+  notifTitle:   { fontSize: 14, fontWeight: '800', color: COLORS.text },
+  notifBody:    { fontSize: 13, color: COLORS.muted, marginTop: 3, lineHeight: 18 },
+  notifMeta:    { fontSize: 11, color: COLORS.light, marginTop: 5 },
 });
