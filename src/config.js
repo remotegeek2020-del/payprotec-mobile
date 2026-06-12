@@ -1,5 +1,3 @@
-// ── Replace this with your actual Vercel deployment URL ──────────────────────
-// Example: 'https://merchant-management-console.vercel.app'
 export const API_BASE_URL = 'https://merchant-management-console-git-main-nmanahan-6562s-projects.vercel.app';
 
 export const COLORS = {

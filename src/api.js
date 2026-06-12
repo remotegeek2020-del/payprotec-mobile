@@ -1,590 +1,310 @@
 import { API_BASE_URL } from './config';
 import { Storage } from './storage';
 
-async function request(path, body, method = 'POST') {
-  const token = await Storage.get('session_token');
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+// The partner backend (merchant-management-console) expects the session token
+// inside the POST body as `token` — it never reads the Authorization header.
+async function request(path, body, { auth = true } = {}) {
+  const token = auth ? await Storage.get('partner_session_token') : null;
+  const payload = token ? { token, ...body } : body;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 
-  const data = await res.json();
+  let data;
+  const text = await res.text();
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    return { success: false, error: `Server error (${res.status}): ${text.slice(0, 200)}` };
+  }
 
-  if (res.status === 401 && data.reason === 'session_expired') {
-    await Storage.remove('session_token');
+  // A 401 on an authenticated call means the partner session is gone.
+  if (res.status === 401 && token) {
+    await Storage.remove('partner_session_token');
     throw { sessionExpired: true };
   }
 
   return data;
 }
 
-// Persist the logged-in user's identity + permission flags.
-async function storeUser(user) {
-  if (!user) return;
-  if (user.userid != null) await Storage.set('user_id', String(user.userid));
-  const name = [user.first_name, user.last_name].filter(Boolean).join(' ');
-  if (name) await Storage.set('user_name', name);
-  if (user.role)  await Storage.set('user_role', user.role);
-  // Granular permission flags — stored as '1' or '0'
-  const flags = [
-    'access_merchants','access_deployments','access_returns','access_inventory',
-    'access_partners','access_admin_dashboard','access_sending_reports',
-    'access_jarvis','can_delete_tickets',
-  ];
-  for (const f of flags) {
-    await Storage.set(f, user[f] ? '1' : '0');
-  }
-}
-
-// Retrieve the permission object for RBAC checks in screens.
-export async function getUserPerms() {
-  const role  = (await Storage.get('user_role')) || '';
-  const isAdmin = role === 'admin' || role === 'super_admin' || role === 'operations admin';
-  async function flag(key) { return (await Storage.get(key)) === '1'; }
-  return {
-    role,
-    isAdmin,
-    merchants:    isAdmin || await flag('access_merchants'),
-    deployments:  isAdmin || await flag('access_deployments'),
-    returns:      isAdmin || await flag('access_returns'),
-    inventory:    isAdmin || await flag('access_inventory'),
-    partners:     isAdmin || await flag('access_partners'),
-    adminDash:    isAdmin || await flag('access_admin_dashboard'),
-    sendReports:  isAdmin || await flag('access_sending_reports'),
-  };
-}
-
 // ── AUTH ──────────────────────────────────────────────────────────────────────
+// Endpoint: POST /api/partner-auth
+// Login response: { success, token, partner: { id, name, email } }
+// Validate response: { success, partner, identifiers[], is_branded }
 export const Auth = {
-  async login(email, passkey) {
-    const deviceToken = await Storage.get('device_token');
-    const data = await request('/api/login', { action: 'login', email, passkey, deviceToken });
-    if (data.success && data.sessionToken) {
-      await Storage.set('session_token', data.sessionToken);
-      await storeUser(data.user);
+  async login(email, password) {
+    const data = await request('/api/partner-auth', {
+      action:   'login',
+      email:    email.trim().toLowerCase(),
+      password,
+    }, { auth: false });
+    if (data.success && data.token) {
+      await Storage.set('partner_session_token', data.token);
+      const p = data.partner || {};
+      if (p.id)    await Storage.set('partner_person_id', p.id);
+      if (p.name)  await Storage.set('partner_name', p.name);
+      if (p.email) await Storage.set('partner_email', p.email);
+      // Normalized shape the screens already consume
+      data.person = { id: p.id, full_name: p.name, email: p.email };
     }
     return data;
   },
-  async verify2FA(userId, code, remember) {
-    const data = await request('/api/login', { action: 'verify2FA', userId, code, remember });
-    if (data.success && data.sessionToken) {
-      await Storage.set('session_token', data.sessionToken);
-      if (remember && data.newDeviceToken) await Storage.set('device_token', data.newDeviceToken);
-      await storeUser(data.user);
+
+  async validate() {
+    const token = await Storage.get('partner_session_token');
+    if (!token) return null;
+    const data = await request('/api/partner-auth', { action: 'validate', token });
+    if (data.success) {
+      const p = data.partner || {};
+      if (p.id)    await Storage.set('partner_person_id', p.id);
+      if (p.name)  await Storage.set('partner_name', p.name);
+      if (p.email) await Storage.set('partner_email', p.email);
+      if (data.identifiers) await Storage.set('partner_identifiers', JSON.stringify(data.identifiers));
     }
     return data;
   },
+
   async logout() {
-    try { await request('/api/login', { action: 'logout' }); } catch {}
-    for (const k of ['session_token','user_id','user_name','user_role',
-      'access_merchants','access_deployments','access_returns','access_inventory',
-      'access_partners','access_admin_dashboard','access_sending_reports',
-      'access_jarvis','can_delete_tickets']) {
+    try { await request('/api/partner-auth', { action: 'logout' }); } catch (e) { /* ignore */ }
+    for (const k of ['partner_session_token','partner_person_id','partner_name','partner_email','partner_identifiers']) {
       await Storage.remove(k);
     }
   },
-};
 
-// ── MERCHANTS ─────────────────────────────────────────────────────────────────
-export const Merchants = {
-  // Response: { success, data[], count,
-  //             metrics: { totalMTD, total30D, total90D, portfolioShare } }
-  // Backend only filters when BOTH query and filterBy are sent; page is 0-based.
-  // filterBy: dba_name | merchant_id | agent_id | company_name | partner_name
-  // statusFilter: e.g. 'Approved', 'Closed', 'Pending' …
-  list(query = '', page = 1, limit = 20, filterBy = 'dba_name', statusFilter = '') {
-    const body = { action: 'list', page: Math.max(0, page - 1), limit };
-    if (query) { body.query = query; body.filterBy = filterBy; }
-    if (statusFilter) body.statusFilter = statusFilter;
-    return request('/api/merchants', body);
-  },
-  // Update merchant fields. id = merchant row UUID; payload = fields to change.
-  // Response: { success, data: [updated_merchant] }
-  async update(id, payload) {
-    const user = await Storage.get('user_name');
-    return request('/api/merchants', { action: 'update', id, payload, user });
-  },
-  // merchant_uuid is the merchant row UUID (m.id), NOT the MID.
-  get(merchant_uuid) {
-    return request('/api/merchants', { action: 'get_full_merchant', merchant_uuid });
-  },
-  // Response: { success, data[] } — rows have title, body, type, display_name, created_at
-  getNotes(merchant_uuid, type) {
-    const body = { action: 'get_notes', merchant_uuid };
-    if (type) body.type = type;
-    return request('/api/merchants', body);
-  },
-  async addNote(merchant_uuid, title, body) {
-    const created_by = await Storage.get('user_id');
-    return request('/api/merchants', { action: 'add_note', merchant_uuid, title, body, created_by });
-  },
-  // Response: { success, data[] } — rows include assignee_name
-  getMerchantTasks(merchant_uuid) {
-    return request('/api/merchants', { action: 'get_tasks', merchant_uuid });
-  },
-  // Required: merchant_id (string), dba_name (string).
-  // Optional: email, merchant_phone, merchant_primary_contact,
-  //           merchant_address, merchant_city, merchant_state, merchant_zip,
-  //           merchant_country, agent_id, account_status, source
-  // Response: { success, merchant_id }
-  create(payload) {
-    return request('/api/merchants', { action: 'create', ...payload });
-  },
-  // Current + past equipment at a merchant.
-  // Response: { success, current: [{id, serial_number, terminal_type, deployment_id}],
-  //             past: [{serial_number, terminal_type, deployment_display_id, return_display_id}] }
-  getEquipment(merchant_uuid) {
-    return request('/api/merchants', { action: 'get_merchant_equipment', merchant_uuid });
-  },
-  // Add a task to a merchant. Required: merchant_uuid, title.
-  // Optional: body, due_date, assigned_to.
-  async addTask(merchant_uuid, title, { body, due_date, assigned_to } = {}) {
-    const created_by = await Storage.get('user_id');
-    return request('/api/merchants', { action: 'add_task', merchant_uuid, title, body, due_date, assigned_to, created_by });
-  },
-  // Toggle a task between Pending and Completed.
-  // Response: { success, status }
-  updateTaskStatus(task_id) {
-    return request('/api/merchants', { action: 'update_task_status', task_id });
-  },
-  // Look up an agent name by agent ID string. Response: { found, agent_name? }
-  lookupAgent(agent_id) {
-    return request('/api/merchants', { action: 'lookup_agent', agent_id });
-  },
-  // Onboarding pipeline stats. period in days (1–730), or date_from/date_to.
-  // Response: { success, stages[], period_counts, approved_period, declined_period,
-  //             conversion_rate, top_partners[{name,count}], recent[] }
-  getPipelineStats({ period, date_from, date_to } = {}) {
-    const body = { action: 'get_pipeline_stats' };
-    if (period)    body.period    = period;
-    if (date_from) body.date_from = date_from;
-    if (date_to)   body.date_to   = date_to;
-    return request('/api/merchants', body);
-  },
-  // Prime49 residuals rows.
-  // Response: { success, data: [{dba_name, merchant_id, volume_30_day, agent_id,
-  //             agent_name, agent_company, rev_share, net_residual, ppt_residual, agent_residual}] }
-  getPrime49Residuals() {
-    return request('/api/merchants', { action: 'get_prime49_residuals' });
-  },
-};
-
-// ── RETURNS ───────────────────────────────────────────────────────────────────
-export const Returns = {
-  // Response: { success, data[], metrics: { open, defective }, count, totalCount }
-  list(query = '', offset = 0, limit = 20, filters = {}) {
-    return request('/api/returns', { action: 'list', query, offset, limit, ...filters });
-  },
-  // payload: { id (return row UUID, required), equipment_id, destination,
-  //            merchant_id, equipment_received_date, condition }
-  complete(payload) {
-    return request('/api/returns', { action: 'complete_return', payload });
-  },
-  remove(return_uuid) {
-    return request('/api/returns', { action: 'delete', return_uuid });
-  },
-  // Add equipment items to an existing open RMA.
-  // Required: return_uuid (string), equipment_ids (array of IDs)
-  // Response: { success, added, message }
-  addItems(return_uuid, equipment_ids) {
-    return request('/api/returns', { action: 'add_items', return_uuid, equipment_ids });
-  },
-  // Retrieve unprocessed deployment items eligible to be added to a bulk RMA.
-  // Required: (none beyond auth) — optional: merchant_id to scope results
-  getAddableItems(merchant_id) {
-    const body = { action: 'get_addable_items' };
-    if (merchant_id) body.merchant_id = merchant_id;
-    return request('/api/returns', body);
-  },
-};
-
-// ── DEPLOYMENTS ───────────────────────────────────────────────────────────────
-export const Deployments = {
-  // Response: { success, data[], metrics: { active, total, today },
-  //             pagination: { totalRecords, currentPage, totalPages } }
-  list(query = '', page = 1, limit = 20) {
-    return request('/api/deployments', { action: 'list', query, page, limit });
-  },
-  // payload: { deployment_id (row UUID), status, tracking_id, target_date,
-  //            notes, purchase_type, merchant_received_date }
-  update(payload) {
-    return request('/api/deployments', { action: 'update', payload });
-  },
-  // deployment_id is the row UUID. Response: { success, data, isBulk?, ... }
-  checkRma(deployment_id) {
-    return request('/api/deployments', { action: 'check_rma', deployment_id });
-  },
-  // Create a single-unit deployment.
-  // Required: payload.merchant_id (UUID), payload.equipment_id (UUID), payload.target_date (ISO date string)
-  // Optional: payload.tid, payload.tracking_id, payload.notes, payload.purchase_type
-  // Response: { success, data[] } on 200; { success: false, message } on 409/400
-  create(payload) {
-    return request('/api/deployments', { action: 'create', payload });
-  },
-  // Search for merchants and stocked equipment. query: string
-  // Response: { success, merchants[{id,dba_name,merchant_id}], inventory[{id,serial_number,terminal_type,status}] }
-  getLookups(query = '') {
-    return request('/api/deployments', { action: 'getLookups', query });
-  },
-};
-
-// ── DASHBOARD ─────────────────────────────────────────────────────────────────
-export const Dashboard = {
-  async stats() {
-    const [merchants, returns, deployments, taskStats] = await Promise.allSettled([
-      Merchants.list('', 1, 1),
-      Returns.list('', 0, 1),
-      Deployments.list('', 1, 1),
-      Tasks.stats(),
-    ]);
+  async getSession() {
+    const token = await Storage.get('partner_session_token');
+    if (!token) return null;
     return {
-      merchants: merchants.value?.count ?? '—',
-      openReturns: returns.value?.metrics?.open ?? '—',
-      activeDeployments: deployments.value?.metrics?.active ?? '—',
-      openTasks: taskStats.value?.all ?? '—',
+      token,
+      person_id: await Storage.get('partner_person_id'),
+      name:      await Storage.get('partner_name'),
+      email:     await Storage.get('partner_email'),
     };
   },
+
+  // Always responds { success: true } regardless of whether the account exists.
+  forgotPassword(email) {
+    return request('/api/partner-auth', {
+      action: 'forgot_password',
+      email:  email.trim().toLowerCase(),
+    }, { auth: false });
+  },
 };
 
-// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+// ── DASHBOARD (api/partner-data.js) ───────────────────────────────────────────
+export const Dashboard = {
+  // Combines get_dashboard + get_my_rank into the scorecard shape the screens use.
+  // Returns: { success, person, identifiers[], scorecard: { merchant_count, volume_30d, volume_90d, volume_mtd, rank, tier, companies[] } }
+  async getScorecard() {
+    const [dash, rank] = await Promise.all([
+      request('/api/partner-data', { action: 'get_dashboard' }),
+      request('/api/partner-data', { action: 'get_my_rank' }).catch(() => ({})),
+    ]);
+    if (!dash.success) return dash;
+
+    const ov = dash.overview || {};
+    const companiesMap = dash.companies || {};
+    const identifiers = (dash.identifiers || []).map(id => ({
+      ...id,
+      company_name: companiesMap[id.agent_id] || '',
+    }));
+    const companies = [...new Set(Object.values(companiesMap))].map(name => ({ company_name: name }));
+
+    return {
+      success: true,
+      person: dash.partner,
+      identifiers,
+      // trends: { growth, stable, at_risk, no_data, chart[] }
+      trends: dash.trends || null,
+      // new_enrollments this week: [{ id, merchant_id, dba_name, account_status, agent_id, enrollment_date }]
+      newEnrollments: dash.new_enrollments?.data || [],
+      scorecard: {
+        merchant_count: ov.merchants,
+        approved:       ov.approved,
+        pending:        ov.pending,
+        volume_30d:     ov.vol30,
+        volume_90d:     ov.vol90,
+        volume_mtd:     ov.mtd,
+        open_rmas:      ov.open_rmas,
+        rank:           rank?.rank ?? null,
+        tier:           rank?.tier ?? null,
+        companies,
+      },
+    };
+  },
+
+  // Real overview numbers (get_dashboard always returns open_rmas: 0; this one is accurate).
+  // Returns: { success, data: { merchants, approved, pending, closed, mtd, vol30, vol90, open_rmas, identifiers[] } }
+  getOverview() {
+    return request('/api/partner-data', { action: 'get_overview' });
+  },
+
+  // Get cached identifiers from storage (populated on login/validate)
+  async getIdentifiers() {
+    const raw = await Storage.get('partner_identifiers');
+    try { return raw ? JSON.parse(raw) : []; }
+    catch (e) { return []; }
+  },
+};
+
+// ── NOTIFICATIONS (api/partner-data.js) ───────────────────────────────────────
 export const Notifications = {
-  // Response: { success, counts: { returns, deployments, tasks, ... } }
-  async getCounts() {
-    const userid = await Storage.get('user_id');
-    if (!userid) return { success: false, counts: {} };
-    return request('/api/notifications', { action: 'get_counts', userid });
+  // Returns: { success, notifications: [{ id, type, title, body, actor_name, is_read, created_at, link }], unread }
+  get() {
+    return request('/api/partner-data', { action: 'get_notifications' });
   },
-  // section: returns | deployments | tickets | tasks | ideas | partners | merchants | inventory
-  async markSeen(section) {
-    const userid = await Storage.get('user_id');
-    if (!userid) return { success: false };
-    return request('/api/notifications', { action: 'mark_seen', userid, section });
+  markRead() {
+    return request('/api/partner-data', { action: 'mark_notifications_read' });
   },
 };
 
-// ── TICKETS ───────────────────────────────────────────────────────────────────
+// ── MERCHANTS (api/partner-data.js) ───────────────────────────────────────────
+export const Merchants = {
+  // Get merchants for one agent identifier string (e.g. the partner's agent ID).
+  // The backend returns all of the partner's merchants; we filter by agent_id.
+  async getByIdentifier(id_string) {
+    const res = await request('/api/partner-data', { action: 'get_merchants', page: 0, limit: 1000 });
+    if (!res.success) return res;
+    const data = id_string ? (res.data || []).filter(m => m.agent_id === id_string) : (res.data || []);
+    return { ...res, data };
+  },
+
+  // Full merchant detail: { success, data: { merchant, equipment, legacyEquipment, notes, rmas } }
+  get(merchant_uuid) {
+    return request('/api/partner-data', { action: 'get_merchant_detail', merchant_uuid });
+  },
+
+  // Add a partner note to a merchant record. Returns: { success }
+  addNote(merchant_uuid, title, body) {
+    return request('/api/partner-data', { action: 'add_note', merchant_uuid, title, body });
+  },
+
+  // Submit an RMA request. NOTE: the backend expects the merchant *string* ID
+  // (merchants.merchant_id), not the uuid. equipment_serial and notes are optional.
+  requestRma({ merchant_id, equipment_serial, reason, notes }) {
+    return request('/api/partner-data', { action: 'request_rma', merchant_id, equipment_serial, reason, notes });
+  },
+};
+
+// ── SUB-PARTNERS (api/partner-data.js) ────────────────────────────────────────
+export const SubPartners = {
+  // Returns: { success, data: [{ person_id, full_name, email, is_portal_active,
+  //   agent_ids: [{ id, id_string, rev_share }], merchant_count, volume_30_day }] }
+  list() {
+    return request('/api/partner-data', { action: 'get_sub_partners' });
+  },
+
+  // Returns: { success, data: [{ merchant_id, dba_name, account_status, volume_30_day, enrollment_date }] }
+  getMerchants(sub_person_id) {
+    return request('/api/partner-data', { action: 'get_sub_partner_merchants', sub_person_id });
+  },
+
+  // Backend requires email, full_name, agent_id_string and a parent identifier;
+  // we pass parent_id_string and the server resolves it to the identifier UUID.
+  invite({ email, full_name, agent_id_string, rev_share, parent_id_string }) {
+    return request('/api/partner-data', {
+      action: 'invite_sub_partner',
+      email, full_name, agent_id_string, rev_share, parent_id_string,
+    });
+  },
+};
+
+// ── TICKETS (api/tickets.js — partner actions, token in body) ─────────────────
 export const Tickets = {
-  // List tickets for the authenticated partner.
-  // Optional: merchant_uuid to filter by merchant.
-  // Response: { success, data: [{ id, ticket_number, type, category, subject, status, priority, created_at, updated_at }] }
   list(merchant_uuid) {
     const body = { action: 'list_for_partner' };
     if (merchant_uuid) body.merchant_uuid = merchant_uuid;
     return request('/api/tickets', body);
   },
-  // Create a new ticket.
-  // Required: type (string), subject (string)
-  // Optional: merchant_id, category, description, priority, deployment_id, equipment_serial
-  // Response: { success, ticket: { id, ticket_number, status, created_at } }
-  create(payload) {
-    return request('/api/tickets', { action: 'create', ...payload });
-  },
-  // Get full ticket details.
-  // Required: ticket_id
-  // Response: { success, ticket: { full ticket data } }
+
   get(ticket_id) {
     return request('/api/tickets', { action: 'get_detail', ticket_id });
   },
-  // Get comments on a ticket.
-  // Required: ticket_id
-  // Response: { success, comments: [] }
+
+  create(payload) {
+    return request('/api/tickets', { action: 'create', ...payload });
+  },
+
   getComments(ticket_id) {
     return request('/api/tickets', { action: 'get_comments', ticket_id });
   },
-  // Add a comment to a ticket.
-  // Required: ticket_id, body
-  // Response: { success, comment: { id, ticket_id, author_type, author_name, body, created_at } }
+
   addComment(ticket_id, body) {
     return request('/api/tickets', { action: 'add_comment', ticket_id, body });
   },
-  // Get total unread count for authenticated partner.
-  // Response: { success, total }
+
   getUnreadTotal() {
     return request('/api/tickets', { action: 'get_unread_total' });
   },
-  // Staff-side ticket list. All filters optional: status, type, limit,
-  // merchant_id, person_id (filter tickets belonging to one partner).
-  // Response: { success, data: ticket[] }
-  listForStaff(filters = {}) {
-    return request('/api/tickets', { action: 'list_for_staff', ...filters });
-  },
 };
 
-// ── EQUIPMENTS ────────────────────────────────────────────────────────────────
-export const Equipments = {
-  // List equipment with optional search/filters.
-  // Optional: query, filterLocation, filterStatus, limit (default 50), page (default 0)
-  // Response: { success, data[], count, metrics: { total, inOffice, inRepair, deployed, retired, alerts } }
-  list({ query = '', filterLocation, filterStatus, limit = 50, page = 0 } = {}) {
-    const body = { action: 'list', query, limit, page };
-    if (filterLocation) body.filterLocation = filterLocation;
-    if (filterStatus)   body.filterStatus   = filterStatus;
-    return request('/api/equipments', body);
-  },
-  // Create a single equipment unit.
-  // Required: payload.serial_number
-  // Optional: all other equipment fields (terminal_type, condition, received_date, current_location, notes)
-  // Response: { success, data: Equipment }
-  create(payload) {
-    return request('/api/equipments', { action: 'create', payload });
-  },
-  // Get all unique serial numbers.
-  // Response: { success, serials: string[] }
-  getAllSerials() {
-    return request('/api/equipments', { action: 'getAllSerials' });
-  },
-  // Get equipment activity/history logs.
-  // Required: equipment_id
-  // Response: { success, data: EquipmentLog[] }
-  getHistory(equipment_id) {
-    return request('/api/equipments', { action: 'getHistory', equipment_id });
-  },
-  // List available terminal types.
-  // Response: { success, terminal_types: [{ id, name, sort_order, is_active }] }
-  listTerminalTypes() {
-    return request('/api/equipments', { action: 'list_terminal_types' });
-  },
-  // Update an equipment unit.
-  // Required: id. payload may contain: serial_number, terminal_type, condition,
-  //           notes, received_date, current_location
-  // Response: { success, data[] }
-  update(id, payload) {
-    return request('/api/equipments', { action: 'update', id, payload });
-  },
-  // List units currently at the Warsaw Repairs location.
-  // Response: { success, data[] (rows include repair_stage, repair_notes, days_in_repair),
-  //             summary: { total, critical_count, avg_days_in_repair, stage_counts,
-  //                        model_counts, critical_threshold_days } }
-  listRepairQueue() {
-    return request('/api/equipments', { action: 'list_repair_queue' });
-  },
-  // Log a repair stage change / note on a unit in the repair queue.
-  // Required: equipment_id, repair_stage. Optional: repair_notes
-  // Response: { success }
-  logRepairAction(equipment_id, repair_stage, repair_notes) {
-    return request('/api/equipments', { action: 'log_repair_action', equipment_id, repair_stage, repair_notes });
-  },
-  // Close out a repair. outcome: 'scrap' → decommissioned/Retired,
-  // anything else → stocked/Warsaw Office. Required: equipment_id, outcome
-  // Response: { success }
-  closeRepair(equipment_id, outcome) {
-    return request('/api/equipments', { action: 'close_repair', equipment_id, outcome });
-  },
-  // Fleet ROI / utilization stats.
-  // Optional: idle_threshold_days (default 90)
-  // Response: { success, idle_threshold_days, summary, model_stats[], idle_serials[], location_breakdown[] }
-  getRoiStats(idle_threshold_days) {
-    const body = { action: 'get_roi_stats' };
-    if (idle_threshold_days) body.idle_threshold_days = idle_threshold_days;
-    return request('/api/equipments', body);
-  },
-};
-
-// ── TASKS ─────────────────────────────────────────────────────────────────────
-export const Tasks = {
-  // page is 0-based. Response: { success, data[], count } — rows include
-  // merchants: { id, dba_name, merchant_id }, assigned_to_name, created_by_name, is_overdue
-  list({ view = 'mine', status, priority, assigned_to, page = 0, limit = 25 } = {}) {
-    const body = { action: 'get_tasks', view, page, limit };
-    if (status) body.status = status;
-    if (priority) body.priority = priority;
-    if (assigned_to) body.assigned_to = assigned_to;
-    return request('/api/tasks', body);
-  },
-  // Response: { success, mine, overdue, all }
-  stats() {
-    return request('/api/tasks', { action: 'get_stats' });
-  },
-  // Required: title, merchant_id (merchant row UUID).
-  // Optional: body, assigned_to, due_date, priority (default 'Normal'), notes
-  create(payload) {
-    return request('/api/tasks', { action: 'create_task', ...payload });
-  },
-  // payload may contain: title, body, status, priority, due_date, notes, assigned_to
-  update(task_id, payload) {
-    return request('/api/tasks', { action: 'update_task', task_id, payload });
-  },
-  remove(task_id) {
-    return request('/api/tasks', { action: 'delete_task', task_id });
-  },
-  // Response: { success, data[] } — rows have body, author_name, created_at
-  getComments(task_id) {
-    return request('/api/tasks', { action: 'get_comments', task_id });
-  },
-  addComment(task_id, body) {
-    return request('/api/tasks', { action: 'add_comment', task_id, body });
-  },
-  // Response: { success, data: [{ id, full_name }] }
-  getStaff() {
-    return request('/api/tasks', { action: 'get_staff' });
-  },
-};
-
-// ── PARTNERS ──────────────────────────────────────────────────────────────────
-export const Partners = {
-  // Leaderboard of all agents.
-  // Response: { success, data: [{person_id, name, merchant_count, volume_30_day, volume_90_day, rank, tier, growth_pct}],
-  //             needs_attention: [], total }
-  getLeaderboard() {
-    return request('/api/partners', { action: 'get_leaderboard' });
-  },
-  // Scorecard for a specific agent.
-  // Required: person_id. Optional: from_date, to_date.
-  // Response: { success, scorecard: { totals, companies, top_merchants } }
-  getScorecard(person_id, from_date, to_date) {
-    const body = { action: 'get_scorecard', person_id };
-    if (from_date) body.from_date = from_date;
-    if (to_date)   body.to_date   = to_date;
-    return request('/api/partners', body);
-  },
-  // List of all agents (for admin transfers).
-  // Response: { success, data: [{agent_id, person_name, person_email, company_name, identifier_count}] }
-  getAllAgents() {
-    return request('/api/partners', { action: 'get_all_agents_for_transfer' });
-  },
-  // Complete unfiltered roster — every person record, plus agents/identifiers/companies.
-  // (The leaderboard only contains partners with merchant activity, so it under-counts.)
-  // Response: { success, data: { persons[], agents[], identifiers[], companies[] } }
-  getList() {
-    return request('/api/partners', { action: 'get_partners_list' });
-  },
-  // Companies with agent counts.
-  // Response: { success, data: [{id, company_name, agent_count}] }
-  getCompaniesFull() {
-    return request('/api/partners', { action: 'get_companies_full' });
-  },
-  // Agents (and their identifiers) for a company.
-  // Required: company_id.
-  // Response: { success, data: [{agent_id, person_id, person_name, person_email,
-  //             identifiers: [{id, id_string, rev_share}] }] }
-  getCompanyAgents(company_id) {
-    return request('/api/partners', { action: 'get_company_agents', company_id });
-  },
-  // Identifiers not tied to any company.
-  // Response: { success, data: [{id, id_string, rev_share, prime49, person_name, person_email, person_id}] }
-  getIndependentIdentifiers() {
-    return request('/api/partners', { action: 'get_independent_identifiers' });
-  },
-  // Update one field on a person record.
-  // Required: id (person id), field, value.
-  // field MUST be one of: full_name, email, phone_number, is_branded, enrolled_at.
-  // Response: { success }
-  updatePersonField(id, field, value) {
-    return request('/api/partners', { action: 'update_person_field', id, field, value });
-  },
-  // Update an identifier's rev_share / prime49 / parent company.
-  // Required: id (identifier id). NOTE: the id_string itself is IMMUTABLE —
-  // the backend has no action to rename an agent ID.
-  // Response: { success }
-  updateIdentifier(id, { rev_share, prime49, new_parent_id } = {}) {
-    return request('/api/partners', { action: 'update_identifier_all', id, rev_share, prime49, new_parent_id });
-  },
-  // Create a partner (full onboarding).
-  // payload: { person: {name, email, phone, hl_id, is_branded, enrolled_at},
-  //            company: {id, name, isIndependent},   // existing: id; new: name only; none: isIndependent=true
-  //            identifiers: [{string, rev, prime}],
-  //            isQuickAdd, allowNoEmail }
-  // person.name required; email required unless allowNoEmail=true.
-  // Response: { success, message? }
-  createPartner(payload) {
-    return request('/api/partners', { action: 'complete_onboarding', ...payload });
-  },
-  // Lightweight companies list (for pickers).
-  // Response: { success, data: [{id, company_name}] }
-  getCompanies() {
-    return request('/api/partners', { action: 'get_companies' });
-  },
-  // Partner notes (mirrors GHL notes when hl_contact_id given).
-  // Response: { success, data: [{id, ghl_note_id, title, body, author_name, created_at, is_pinned, source}] }
-  getNotes(person_id, hl_contact_id) {
-    return request('/api/partners', { action: 'get_notes', person_id, hl_contact_id });
-  },
-  // Required: person_id, body. Optional: title, hl_contact_id (syncs note to GHL).
-  async addNote(person_id, body, { title, hl_contact_id } = {}) {
-    const author_name = await Storage.get('user_name');
-    return request('/api/partners', { action: 'add_note', person_id, body, title, author_name, hl_contact_id });
-  },
-  // Required: note_id. Optional: body, title, is_pinned, hl_contact_id.
-  updateNote(note_id, patch = {}) {
-    return request('/api/partners', { action: 'update_note', note_id, ...patch });
-  },
-  deleteNote(note_id, hl_contact_id) {
-    return request('/api/partners', { action: 'delete_note', note_id, hl_contact_id });
-  },
-  // Merchants tied to one identifier (agent ID).
-  // Response: { success, data: [{merchant_id, dba_name, account_status, enrollment_date,
-  //             volume_30_day, volume_90_day, volume_mtd, last_batch_date,
-  //             merchant_city, merchant_state, merchant_phone, email}], total }
-  getIdentifierMerchants(identifier_id) {
-    return request('/api/partners', { action: 'get_merchant_data_raw', identifier_id });
-  },
-};
-
-// ── COMMUNITY ─────────────────────────────────────────────────────────────────
+// ── COMMUNITY (api/community.js — partner identified via body token) ──────────
 export const Community = {
-  // Response: { success, data: channels[] }
   getChannels() {
     return request('/api/community', { action: 'get_channels' });
   },
-  // Response: { success, data: posts[], count, has_more }
   getFeed({ channel_id, page = 0, limit = 20 } = {}) {
     const body = { action: 'get_feed', page, limit };
     if (channel_id) body.channel_id = channel_id;
     return request('/api/community', body);
   },
-  // Required: body, channel_id.
-  async createPost(channel_id, body) {
-    const staff_id = await Storage.get('user_id');
-    const staff_name = await Storage.get('user_name');
-    return request('/api/community', { action: 'create_post', body, channel_id, staff_id, staff_name });
+  createPost(channel_id, body) {
+    return request('/api/community', { action: 'create_post', body, channel_id });
   },
-  // Toggle reaction on a post.
-  async react(post_id, emoji = '👍') {
-    const staff_id = await Storage.get('user_id');
-    return request('/api/community', { action: 'react', post_id, emoji, staff_id });
+  react(post_id, emoji = '👍') {
+    return request('/api/community', { action: 'react', post_id, emoji });
   },
-  // Response: { success, data: comments[] }
   getComments(post_id) {
     return request('/api/community', { action: 'get_comments', post_id });
   },
-  // Required: post_id, body.
-  async addComment(post_id, body) {
-    const staff_id = await Storage.get('user_id');
-    const staff_name = await Storage.get('user_name');
-    return request('/api/community', { action: 'add_comment', post_id, body, staff_id, staff_name });
-  },
-  // Response: { success, data: users[] }
-  getMembers() {
-    return request('/api/community', { action: 'community_members' });
-  },
-  // Response: { success, dms: int, notifications: int }
-  getUnreadCounts() {
-    return request('/api/community', { action: 'get_unread_counts' });
+  addComment(post_id, body) {
+    return request('/api/community', { action: 'add_comment', post_id, body });
   },
 };
 
-// ── CHAT (Direct Messages) ────────────────────────────────────────────────────
+// ── MESSAGES (api/partner-data.js) ────────────────────────────────────────────
+// The partner portal has a single message thread with PayProTec staff
+// (get_messages / send_message), not per-user conversations.
+const SUPPORT_USER = { id: 'support', name: 'PayProTec Support', role: 'Staff' };
+
 export const Chat = {
-  // List of users you can DM (staff + partners with portal).
-  // Response: array of { id, full_name, last_message, unread_count, last_seen }
-  getUserList() {
-    return request('/api/chat', { action: 'getUserList' });
+  async getUserList() {
+    return { success: true, users: [SUPPORT_USER] };
   },
-  // Full conversation thread with another user.
-  // Required: other_id. Response: { messages[], other_profile }
-  getHistory(other_id) {
-    return request('/api/chat', { action: 'getHistory', other_id });
+
+  async getHistory() {
+    // Response: { success, data: [{ id, sender_id, recipient_id, subject, body, created_at }] }
+    const res = await request('/api/partner-data', { action: 'get_messages' });
+    if (!res.success) return res;
+    // Backend returns newest-first; the thread renders oldest-first
+    const data = [...(res.data || [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return { ...res, data };
   },
-  // Send a DM. Required: recipient_id, body.
-  sendMessage(recipient_id, body) {
-    return request('/api/chat', { action: 'sendMessage', recipient_id, body });
+
+  sendMessage(_recipient_id, message) {
+    return request('/api/partner-data', { action: 'send_message', body: message });
   },
-  // Response: { count: number }
-  getUnreadCount() {
-    return request('/api/chat', { action: 'getUnreadCount' });
+};
+
+// ── PROFILE (api/partner-data.js) ─────────────────────────────────────────────
+export const Profile = {
+  // Returns: { success, person, identifiers[] }
+  async get() {
+    const res = await request('/api/partner-data', { action: 'get_dashboard' });
+    if (!res.success) return res;
+    return { success: true, person: res.partner, identifiers: res.identifiers || [] };
+  },
+
+  // Backend only supports full_name and phone_number via update_profile.
+  updateField(_id, field, value) {
+    return request('/api/partner-data', { action: 'update_profile', [field]: value });
+  },
+
+  async changePassword(current_password, new_password) {
+    const partner_id = await Storage.get('partner_person_id');
+    return request('/api/partner-auth', { action: 'change_password', partner_id, current_password, new_password });
   },
 };

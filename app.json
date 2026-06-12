@@ -1,26 +1,20 @@
 {
   "expo": {
-    "name": "payprotec-mobile",
-    "slug": "payprotec-mobile",
+    "name": "PayProTec",
+    "slug": "payprotec-partner",
     "version": "1.0.0",
-    "sdkVersion": "54.0.0",
-    "newArchEnabled": false,
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.payprotec.partner"
     },
     "android": {
+      "package": "com.payprotec.partner",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#004990"
       }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "newArchEnabled": false
   }
 }
