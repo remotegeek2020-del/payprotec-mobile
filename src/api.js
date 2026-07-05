@@ -212,6 +212,36 @@ export const SubPartners = {
   },
 };
 
+// ── PRIME49 & RESIDUALS (api/partner-data.js) ─────────────────────────────────
+export const Prime49 = {
+  // { success, data: { rows[], total_payout, total_volume, merchant_count, has_prime49 } }
+  // row: { dba_name, merchant_id, volume_30d, rev_share, residual, account_status, agent_id }
+  getResiduals() {
+    return request('/api/partner-data', { action: 'get_residuals' });
+  },
+
+  // { success, data: { rows[], count, potential_total } }
+  // row: { merchant_uuid, dba_name, merchant_id, account_status, volume_30d, rev_share, potential }
+  getEligible() {
+    return request('/api/partner-data', { action: 'get_prime49_eligible' });
+  },
+
+  // Enrollment is NOT a partner-data action — it opens a support ticket that
+  // staff action. merchant_id on the ticket is the merchant UUID.
+  requestEnrollment({ merchant_uuid, dba_name, merchant_id }) {
+    const label = dba_name || `MID ${merchant_id || ''}`.trim();
+    return request('/api/tickets', {
+      action: 'create',
+      type: 'general',
+      category: 'Prime49 Enrollment',
+      merchant_id: merchant_uuid,
+      priority: 'normal',
+      subject: `Prime49 Enrollment Request — ${label}`,
+      description: `Partner requested Prime49 enrollment for ${label} (MID ${merchant_id || '—'}).`,
+    });
+  },
+};
+
 // ── TICKETS (api/tickets.js — partner actions, token in body) ─────────────────
 export const Tickets = {
   list(merchant_uuid) {

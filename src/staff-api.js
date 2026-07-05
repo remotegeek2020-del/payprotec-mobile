@@ -112,6 +112,19 @@ export const StaffAuth = {
   },
 };
 
+// ── ANALYTICS (api/analytics.js) ──────────────────────────────────────────────
+// Single read-only 'overview' action. Returns:
+// { success, kpis:{open_tickets, open_deployments, open_returns, equip_deployed,
+//   equip_stocked, utilization_pct, avg_ticket_resolution_h},
+//   series:{weeks[], deployments[], returns[], tickets_created[], tickets_resolved[]},
+//   breakdowns:{deployments_status{}, returns_status{}, tickets_status{}, equipment_status{}},
+//   new_merchants_monthly:{labels[], counts[]} }
+export const StaffAnalytics = {
+  overview() {
+    return staffRequest('/api/analytics', { action: 'overview' });
+  },
+};
+
 // ── NOTIFICATIONS (api/notifications.js) ──────────────────────────────────────
 export const StaffNotifications = {
   getCounts() {

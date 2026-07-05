@@ -11,6 +11,7 @@ import CommunityScreen  from '../screens/CommunityScreen';
 import MessagesScreen   from '../screens/MessagesScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
 import SettingsScreen   from '../screens/SettingsScreen';
+import PartnerPrime49Screen from '../screens/PartnerPrime49Screen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -90,6 +91,16 @@ export default function AppNavigator({ person, onLogout }) {
           options={{
             headerShown: true,
             title: 'Settings',
+            headerTintColor: COLORS.primary,
+            headerTitleStyle: { fontWeight: '800', color: COLORS.text },
+          }}
+        />
+        <Stack.Screen
+          name="Prime49"
+          component={PartnerPrime49Screen}
+          options={{
+            headerShown: true,
+            title: 'My Prime49',
             headerTintColor: COLORS.primary,
             headerTitleStyle: { fontWeight: '800', color: COLORS.text },
           }}

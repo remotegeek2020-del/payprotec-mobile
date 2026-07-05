@@ -45,6 +45,11 @@ function MerchantCard({ item, onPress }) {
       <View style={s.cardMid}>
         <Text style={s.mid}>MID: {item.merchant_id || '—'}</Text>
         {item.merchant_city ? <Text style={s.meta}>{item.merchant_city}{item.merchant_state ? `, ${item.merchant_state}` : ''}</Text> : null}
+        {item.is_prime49 ? (
+          <View style={s.prime49}><Text style={s.prime49Text}>💎 PRIME49</Text></View>
+        ) : (parseFloat(item.volume_30_day) >= 30000 ? (
+          <View style={s.prime49Elig}><Text style={s.prime49EligText}>PRIME49 ELIGIBLE</Text></View>
+        ) : null)}
       </View>
       <View style={s.cardBottom}>
         <View style={s.volItem}>
@@ -248,6 +253,10 @@ const s = StyleSheet.create({
   cardMid:       { flexDirection: 'row', gap: 10, marginBottom: 8 },
   mid:           { fontSize: 12, color: COLORS.primary, fontWeight: '700', fontFamily: 'monospace' },
   meta:          { fontSize: 12, color: COLORS.muted },
+  prime49:       { backgroundColor: '#eef2fb', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  prime49Text:   { fontSize: 10, fontWeight: '800', color: '#004990' },
+  prime49Elig:   { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  prime49EligText: { fontSize: 10, fontWeight: '800', color: '#d97706' },
   cardBottom:    { flexDirection: 'row', alignItems: 'center', gap: 14 },
   volItem:       { alignItems: 'center' },
   volLabel:      { fontSize: 9, fontWeight: '700', color: COLORS.light, textTransform: 'uppercase' },

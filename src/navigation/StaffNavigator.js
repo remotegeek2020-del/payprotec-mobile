@@ -19,6 +19,7 @@ import StaffLogsScreen        from '../screens/staff/StaffLogsScreen';
 import StaffUsersScreen       from '../screens/staff/StaffUsersScreen';
 import StaffSearchScreen      from '../screens/staff/StaffSearchScreen';
 import StaffCommunityScreen   from '../screens/staff/StaffCommunityScreen';
+import StaffAnalyticsScreen   from '../screens/staff/StaffAnalyticsScreen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -87,6 +88,7 @@ function MoreHubScreen({ navigation, user, onLogout }) {
       </View>
 
       <Text style={hub.section}>Tools</Text>
+      <MenuItem icon="📊" label="Analytics" sub="KPIs, trends and status breakdowns" onPress={() => navigation.navigate('StaffAnalytics')} />
       <MenuItem icon="🔍" label="Global Search" sub="Merchants, partners, serials, tickets" onPress={() => navigation.navigate('StaffSearch')} />
       {u.access_partners !== false && (
         <MenuItem icon="🤝" label="Partners" sub="Partner list, scorecards, leaderboard" onPress={() => navigation.navigate('StaffPartners')} />
@@ -166,6 +168,7 @@ export default function StaffNavigator({ user, onLogout }) {
         <Stack.Screen name="StaffUsers"       component={StaffUsersScreen}       options={{ title: 'User Management' }} />
         <Stack.Screen name="StaffSearch"      component={StaffSearchScreen}      options={{ title: 'Global Search' }} />
         <Stack.Screen name="StaffCommunity"   component={StaffCommunityScreen}   options={{ title: 'Community' }} />
+        <Stack.Screen name="StaffAnalytics"   component={StaffAnalyticsScreen}   options={{ title: 'Analytics' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

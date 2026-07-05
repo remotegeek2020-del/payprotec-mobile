@@ -174,9 +174,9 @@ export default function DashboardScreen({ navigation, person }) {
             <Text style={s.sectionTitle}>Quick Actions</Text>
             <View style={s.actionsGrid}>
               <ActionBtn icon="🏪" label="My Merchants" onPress={() => navigation.navigate('Merchants')} />
+              <ActionBtn icon="💎" label="My Prime49"   onPress={() => navigation.navigate('Prime49')} />
               <ActionBtn icon="🎫" label="Tickets"      onPress={() => navigation.navigate('Tickets')} />
               <ActionBtn icon="💬" label="Messages"     onPress={() => navigation.navigate('Messages')} />
-              <ActionBtn icon="👤" label="Profile"      onPress={() => navigation.navigate('Profile')} />
             </View>
 
             {/* Companies */}
