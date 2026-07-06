@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../config';
 import { Dashboard, Merchants } from '../api';
+import { withCache, OfflineBanner } from '../offline';
 
 const STATUS_COLORS = {
   approved:     { bg: '#d1fae5', text: '#059669' },
@@ -131,6 +132,8 @@ export default function MerchantsScreen() {
   const [identifiers, setIdentifiers]   = useState([]);
   const [activeId, setActiveId]         = useState(null);
   const [merchants, setMerchants]       = useState([]);
+  const [offline, setOffline]           = useState(false);
+  const [cachedAt, setCachedAt]         = useState(null);
   const [loading, setLoading]           = useState(false);
   const [refreshing, setRefreshing]     = useState(false);
   const [selected, setSelected]         = useState(null);
@@ -153,8 +156,10 @@ export default function MerchantsScreen() {
   async function loadMerchants(id_string) {
     setLoading(true);
     try {
-      const res = await Merchants.getByIdentifier(id_string);
+      const res = await withCache(`partner_merchants:${id_string}`, () => Merchants.getByIdentifier(id_string));
       setMerchants(res.data || res.merchants || []);
+      setOffline(!!res.fromCache);
+      setCachedAt(res.cachedAt || null);
     } catch (e) { /* ignore */ }
     setLoading(false);
     setRefreshing(false);
@@ -216,6 +221,8 @@ export default function MerchantsScreen() {
           clearButtonMode="while-editing"
         />
       </View>
+
+      {offline && <View style={{ paddingHorizontal: 12 }}><OfflineBanner cachedAt={cachedAt} /></View>}
 
       <FlatList
         data={filtered}

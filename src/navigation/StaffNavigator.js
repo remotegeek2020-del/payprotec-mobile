@@ -20,6 +20,7 @@ import StaffUsersScreen       from '../screens/staff/StaffUsersScreen';
 import StaffSearchScreen      from '../screens/staff/StaffSearchScreen';
 import StaffCommunityScreen   from '../screens/staff/StaffCommunityScreen';
 import StaffAnalyticsScreen   from '../screens/staff/StaffAnalyticsScreen';
+import StaffScannerScreen     from '../screens/staff/StaffScannerScreen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -47,6 +48,7 @@ function HardwareHubScreen({ navigation, user }) {
   return (
     <ScrollView style={hub.root} contentContainerStyle={hub.scroll}>
       <Text style={hub.title}>Hardware</Text>
+      <MenuItem icon="📷" label="Scan Serial" sub="Scan a barcode to look up a unit or file an RMA" onPress={() => navigation.navigate('StaffScanner')} />
       {u.access_deployments !== false && (
         <MenuItem icon="🚚" label="Deployments" sub="Deployed terminals, RMAs, returns to office" onPress={() => navigation.navigate('StaffDeployments')} />
       )}
@@ -169,6 +171,7 @@ export default function StaffNavigator({ user, onLogout }) {
         <Stack.Screen name="StaffSearch"      component={StaffSearchScreen}      options={{ title: 'Global Search' }} />
         <Stack.Screen name="StaffCommunity"   component={StaffCommunityScreen}   options={{ title: 'Community' }} />
         <Stack.Screen name="StaffAnalytics"   component={StaffAnalyticsScreen}   options={{ title: 'Analytics' }} />
+        <Stack.Screen name="StaffScanner"     component={StaffScannerScreen}     options={{ title: 'Scan Serial' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

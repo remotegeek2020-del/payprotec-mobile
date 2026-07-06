@@ -11,10 +11,12 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned · ⏸️ deferred (web-only
 - ✅ Prime49 badges on partner merchant list (get_merchants is_prime49 / eligible ≥ $30k)
 - ✅ Staff **Analytics** dashboard — 7 KPIs, weekly series, status breakdowns (`/api/analytics` overview)
 
-## Phase 2 — Native superpowers ⬜
-- ⬜ Serial/barcode scanner → equipment lookup + file RMA (expo-camera)
-- ⬜ Push notifications (expo-notifications) — ⚠ needs a device-token endpoint added to the web repo
-- ⬜ Offline read cache (merchant/equipment/dashboard)
+## Phase 2 — Native superpowers ✅
+- ✅ Serial/barcode **scanner** (expo-camera + haptics) → equipment lookup → File RMA hands off to Deployments filtered by serial. Staff Hardware → Scan Serial. Manual-entry + torch fallback.
+- 🟡 **Notifications** — permission + local notifications from a 60s poll of the existing notifications API (`notifications.js`); in-app bell already present. ⚠ True remote/background push still needs a device-token endpoint on the web repo (deferred — web is off-limits).
+- ✅ **Offline read cache** (`offline.js`, AsyncStorage) — partner dashboard, partner merchant list, staff merchant list serve last-synced data with an offline banner when the network fails.
+
+New deps (pinned to SDK 54): expo-camera 17.0.10, expo-notifications 0.32.17, expo-device 8.0.10, expo-constants 18.0.13, expo-haptics 15.0.8, @react-native-async-storage/async-storage 2.2.0. **Run `npm install` after pulling.**
 
 ## Phase 3 — Chat 2.0 ⬜
 - ⬜ Group chats (create/list/thread/manage)

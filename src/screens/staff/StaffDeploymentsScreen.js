@@ -368,13 +368,13 @@ function DetailModal({ dep, onClose, onChanged }) {
 }
 
 // ── Screen ─────────────────────────────────────────────────────────────────────
-export default function StaffDeploymentsScreen({ navigation }) {
+export default function StaffDeploymentsScreen({ navigation, route }) {
   const [deployments, setDeployments] = useState([]);
   const [metrics, setMetrics]         = useState(null);
   const [loading, setLoading]         = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
   const [selected, setSelected]       = useState(null);
-  const [query, setQuery]             = useState('');
+  const [query, setQuery]             = useState(route?.params?.serial || '');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage]               = useState(1);
   const [totalPages, setTotalPages]   = useState(1);
@@ -401,6 +401,11 @@ export default function StaffDeploymentsScreen({ navigation }) {
   }, [query, statusFilter]);
 
   useEffect(() => { load(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Serial handed in from the scanner → pre-filter the list to that unit.
+  useEffect(() => {
+    if (route?.params?.serial) setQuery(route.params.serial);
+  }, [route?.params?.serial]);
 
   useEffect(() => {
     const t = setTimeout(() => load(1, query, statusFilter, false), 400);

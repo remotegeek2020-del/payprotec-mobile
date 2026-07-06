@@ -112,6 +112,16 @@ export const StaffAuth = {
   },
 };
 
+// ── EQUIPMENT LOOKUP (api/equipments.js) ──────────────────────────────────────
+export const StaffEquipment = {
+  // Serial/barcode lookup — reuses the inventory list search.
+  // Returns { success, data: [{ id, serial_number, terminal_type, status,
+  //   current_location, merchants: { dba_name }, ... }], count }
+  lookupSerial(serial) {
+    return staffRequest('/api/equipments', { action: 'list', query: serial, page: 0, limit: 5 });
+  },
+};
+
 // ── ANALYTICS (api/analytics.js) ──────────────────────────────────────────────
 // Single read-only 'overview' action. Returns:
 // { success, kpis:{open_tickets, open_deployments, open_returns, equip_deployed,

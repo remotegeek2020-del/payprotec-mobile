@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { COLORS } from '../../config';
 import { staffRequest, StaffAuth } from '../../staff-api';
+import { withCache, OfflineBanner } from '../../offline';
 
 const PAGE_SIZE = 20;
 
@@ -357,20 +358,27 @@ export default function StaffMerchantsScreen({ navigation }) {
   const [query, setQuery]           = useState('');
   const [status, setStatus]         = useState('');
   const [selected, setSelected]     = useState(null);
+  const [offline, setOffline]       = useState(false);
+  const [cachedAt, setCachedAt]     = useState(null);
   const searchTimer = useRef(null);
   const reqId = useRef(0);
 
   const load = useCallback(async (pageNum, q, st, append) => {
     const myReq = ++reqId.current;
     if (append) setLoadingMore(true); else setLoading(true);
+    const isDefault = pageNum === 0 && !q && !st;
     try {
-      const res = await Api.list({ page: pageNum, query: q, statusFilter: st });
+      const res = isDefault
+        ? await withCache('staff_merchants', () => Api.list({ page: 0, query: '', statusFilter: '' }))
+        : await Api.list({ page: pageNum, query: q, statusFilter: st });
       if (myReq !== reqId.current) return; // stale response
       if (res?.success) {
         setMerchants(prev => (append ? [...prev, ...(res.data || [])] : (res.data || [])));
         setCount(res.count || 0);
         setMetrics(res.metrics || null);
         setPage(pageNum);
+        setOffline(isDefault ? !!res.fromCache : false);
+        setCachedAt(isDefault ? (res.cachedAt || null) : null);
       }
     } catch (e) { /* fail quietly */ }
     if (myReq === reqId.current) {
@@ -426,6 +434,8 @@ export default function StaffMerchantsScreen({ navigation }) {
           );
         })}
       </ScrollView>
+
+      {offline && <View style={{ paddingHorizontal: 12, paddingTop: 8 }}><OfflineBanner cachedAt={cachedAt} /></View>}
 
       {/* Metrics strip */}
       {metrics ? (

@@ -6,6 +6,7 @@ import {
 import { COLORS } from '../config';
 import { Dashboard, Notifications } from '../api';
 import { Storage } from '../storage';
+import { withCache, OfflineBanner } from '../offline';
 
 function fmt(n) {
   if (n == null || n === '') return '—';
@@ -40,11 +41,15 @@ export default function DashboardScreen({ navigation, person }) {
   const [unreadCount, setUnreadCount]     = useState(0);
   const [showNotifs, setShowNotifs]       = useState(false);
 
+  // Offline
+  const [offline, setOffline]   = useState(false);
+  const [cachedAt, setCachedAt] = useState(null);
+
   async function load() {
     setLoading(true);
     try {
       const [res, overview, notifs] = await Promise.all([
-        Dashboard.getScorecard(),
+        withCache('partner_dashboard', () => Dashboard.getScorecard()),
         // get_dashboard always reports open_rmas: 0 — get_overview has the real count
         Dashboard.getOverview().catch(() => null),
         Notifications.get().catch(() => null),
@@ -53,6 +58,8 @@ export default function DashboardScreen({ navigation, person }) {
         setScorecard(res.scorecard || res);
         setTrends(res.trends || null);
         setNewEnrollments(res.newEnrollments || []);
+        setOffline(!!res.fromCache);
+        setCachedAt(res.cachedAt || null);
       }
       if (overview?.success) setOpenRmas(overview.data?.open_rmas ?? 0);
       if (notifs?.success) {
@@ -116,6 +123,8 @@ export default function DashboardScreen({ navigation, person }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {offline && <OfflineBanner cachedAt={cachedAt} />}
 
       {loading && !refreshing
         ? <ActivityIndicator color={COLORS.primary} style={{ margin: 32 }} />
