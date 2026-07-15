@@ -2,6 +2,27 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Linking } from 'react-native';
 import { COLORS } from '../config';
 
+// body_text is authored as HTML on the web (WYSIWYG). Native has no HTML
+// renderer, so convert block tags to line breaks, strip the rest, and decode
+// the common entities.
+function htmlToText(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/\s*(p|div|h[1-6]|li)\s*>/gi, '\n')
+    .replace(/<\s*li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Renders active marketing announcements as homepage cards. `api` supplies
 // getActive / track / dismiss (partner or staff variant). Mirrors the web
 // homepage announcement card: impression tracked once, CTA opens the link and
@@ -60,8 +81,8 @@ export default function AnnouncementCards({ api }) {
               <Image source={{ uri: c.image_url }} style={s.image} resizeMode="cover" />
             ) : null}
             <View style={s.body}>
-              {c.title ? <Text style={s.title}>{c.title}</Text> : null}
-              {c.body_text ? <Text style={s.text}>{c.body_text}</Text> : null}
+              {c.title ? <Text style={s.title}>{htmlToText(c.title)}</Text> : null}
+              {c.body_text ? <Text style={s.text}>{htmlToText(c.body_text)}</Text> : null}
               {c.cta_enabled && c.cta_label ? (
                 <TouchableOpacity style={s.cta} onPress={() => onCta(c)} activeOpacity={0.85}>
                   <Text style={s.ctaText}>{c.cta_label}</Text>
