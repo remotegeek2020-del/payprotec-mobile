@@ -14,13 +14,16 @@ import StaffEquipmentsScreen  from '../screens/staff/StaffEquipmentsScreen';
 import StaffRepairQueueScreen from '../screens/staff/StaffRepairQueueScreen';
 import StaffTicketsScreen     from '../screens/staff/StaffTicketsScreen';
 import StaffTasksScreen       from '../screens/staff/StaffTasksScreen';
-import StaffChatScreen        from '../screens/staff/StaffChatScreen';
 import StaffLogsScreen        from '../screens/staff/StaffLogsScreen';
 import StaffUsersScreen       from '../screens/staff/StaffUsersScreen';
 import StaffSearchScreen      from '../screens/staff/StaffSearchScreen';
 import StaffCommunityScreen   from '../screens/staff/StaffCommunityScreen';
 import StaffAnalyticsScreen   from '../screens/staff/StaffAnalyticsScreen';
 import StaffScannerScreen     from '../screens/staff/StaffScannerScreen';
+import ChatListScreen         from '../screens/chat/ChatListScreen';
+import ChatThreadScreen       from '../screens/chat/ChatThreadScreen';
+import NewGroupScreen         from '../screens/chat/NewGroupScreen';
+import GroupInfoScreen        from '../screens/chat/GroupInfoScreen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -165,7 +168,10 @@ export default function StaffNavigator({ user, onLogout }) {
         <Stack.Screen name="StaffRepairQueue" component={StaffRepairQueueScreen} options={{ title: 'Repair Queue' }} />
         <Stack.Screen name="StaffPartners"    component={StaffPartnersScreen}    options={{ title: 'Partners' }} />
         <Stack.Screen name="StaffTasks"       component={StaffTasksScreen}       options={{ title: 'Tasks' }} />
-        <Stack.Screen name="StaffChat"        component={StaffChatScreen}        options={{ title: 'Team Chat' }} />
+        <Stack.Screen name="StaffChat"        component={ChatListScreen}         initialParams={{ mode: 'staff' }} options={{ title: 'Team Chat' }} />
+        <Stack.Screen name="ChatThread"       component={ChatThreadScreen}       options={{ title: 'Chat' }} />
+        <Stack.Screen name="NewGroup"         component={NewGroupScreen}         options={{ title: 'New Group' }} />
+        <Stack.Screen name="GroupInfo"        component={GroupInfoScreen}        options={{ title: 'Group Info' }} />
         <Stack.Screen name="StaffLogs"        component={StaffLogsScreen}        options={{ title: 'Activity Logs' }} />
         <Stack.Screen name="StaffUsers"       component={StaffUsersScreen}       options={{ title: 'User Management' }} />
         <Stack.Screen name="StaffSearch"      component={StaffSearchScreen}      options={{ title: 'Global Search' }} />

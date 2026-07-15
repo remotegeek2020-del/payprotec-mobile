@@ -27,11 +27,20 @@ embed / A-B / targeting / stats stay web-only, admin-side).
   dismiss. (`/api/marketing` get_active / track / dismiss; partner_token or
   staff Bearer.)
 
-## Phase 3 — Chat 2.0 ⬜
-- ⬜ Group chats (create/list/thread/manage)
-- ⬜ Reactions + typing indicators + presence/status
-- ⬜ Image messages (expo-image-picker + signed two-step upload)
-- ⬜ Edit / delete messages
+## Phase 3 — Chat 2.0 ✅
+Unified both portals onto `/api/chat` via one shared client (`chat-api.js`,
+partner_token or staff Bearer) and shared screens (`src/screens/chat/`). The old
+partner support-thread and basic staff 1:1 screens were removed.
+- ✅ Unified conversation list (DMs + groups, sorted by unread/recency) with
+  presence dots + available/away/busy status picker.
+- ✅ Group chats — create (member multi-select), thread with per-sender names,
+  group info (rename, add/remove members, leave, delete).
+- ✅ Reactions (long-press → 6 emojis, toggle) + poll-driven typing indicators +
+  Seen receipts on DMs.
+- ✅ Edit / delete own messages (long-press action sheet).
+- ⏸️ Image messages — deferred (needs expo-image-picker + signed two-step binary
+  upload; text + reactions + groups shipped first). Group photos / setThought /
+  message search also deferred.
 
 ## Phase 4 — ShipStation ⬜ (staff, feature-flag gated)
 - ⬜ Label step on tickets (rates → create_label → print PDF via expo-print; void/reprint)

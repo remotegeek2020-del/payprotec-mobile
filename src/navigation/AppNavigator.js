@@ -8,10 +8,15 @@ import DashboardScreen  from '../screens/DashboardScreen';
 import MerchantsScreen  from '../screens/MerchantsScreen';
 import TicketsScreen    from '../screens/TicketsScreen';
 import CommunityScreen  from '../screens/CommunityScreen';
-import MessagesScreen   from '../screens/MessagesScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
 import SettingsScreen   from '../screens/SettingsScreen';
 import PartnerPrime49Screen from '../screens/PartnerPrime49Screen';
+import ChatListScreen   from '../screens/chat/ChatListScreen';
+import ChatThreadScreen from '../screens/chat/ChatThreadScreen';
+import NewGroupScreen   from '../screens/chat/NewGroupScreen';
+import GroupInfoScreen  from '../screens/chat/GroupInfoScreen';
+
+const chatHeader = { headerShown: true, headerTintColor: COLORS.primary, headerTitleStyle: { fontWeight: '800', color: COLORS.text } };
 
 const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -64,9 +69,10 @@ function TabNavigator({ person, onLogout }) {
 
       <Tab.Screen
         name="Messages"
-        component={MessagesScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon icon="💬" focused={focused} />, tabBarLabel: 'Messages' }}
-      />
+      >
+        {(props) => <ChatListScreen {...props} mode="partner" />}
+      </Tab.Screen>
 
       <Tab.Screen
         name="Profile"
@@ -105,6 +111,9 @@ export default function AppNavigator({ person, onLogout }) {
             headerTitleStyle: { fontWeight: '800', color: COLORS.text },
           }}
         />
+        <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ ...chatHeader, title: 'Chat' }} />
+        <Stack.Screen name="NewGroup"   component={NewGroupScreen}   options={{ ...chatHeader, title: 'New Group' }} />
+        <Stack.Screen name="GroupInfo"  component={GroupInfoScreen}  options={{ ...chatHeader, title: 'Group Info' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

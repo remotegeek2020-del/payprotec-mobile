@@ -315,29 +315,8 @@ export const Community = {
   },
 };
 
-// ── MESSAGES (api/partner-data.js) ────────────────────────────────────────────
-// The partner portal has a single message thread with PayProTec staff
-// (get_messages / send_message), not per-user conversations.
-const SUPPORT_USER = { id: 'support', name: 'PayProTec Support', role: 'Staff' };
-
-export const Chat = {
-  async getUserList() {
-    return { success: true, users: [SUPPORT_USER] };
-  },
-
-  async getHistory() {
-    // Response: { success, data: [{ id, sender_id, recipient_id, subject, body, created_at }] }
-    const res = await request('/api/partner-data', { action: 'get_messages' });
-    if (!res.success) return res;
-    // Backend returns newest-first; the thread renders oldest-first
-    const data = [...(res.data || [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    return { ...res, data };
-  },
-
-  sendMessage(_recipient_id, message) {
-    return request('/api/partner-data', { action: 'send_message', body: message });
-  },
-};
+// Partner messaging moved to the unified /api/chat client (src/chat-api.js),
+// shared with the staff portal — full DMs, groups, reactions, typing, presence.
 
 // ── PROFILE (api/partner-data.js) ─────────────────────────────────────────────
 export const Profile = {
