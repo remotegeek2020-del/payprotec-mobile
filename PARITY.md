@@ -18,6 +18,15 @@ Legend: ✅ done · 🟡 in progress · ⬜ planned · ⏸️ deferred (web-only
 
 New deps (pinned to SDK 54): expo-camera 17.0.10, expo-notifications 0.32.17, expo-device 8.0.10, expo-constants 18.0.13, expo-haptics 15.0.8, @react-native-async-storage/async-storage 2.2.0. **Run `npm install` after pulling.**
 
+## Marketing Announcements ✅ (added out of phase — web review 2026-07-15)
+The web app grew a Marketing subsystem; its consumer surface is the homepage
+**announcement card** on both portals. Ported that (campaign builder / Webflow /
+embed / A-B / targeting / stats stay web-only, admin-side).
+- ✅ `AnnouncementCards` component on partner + staff dashboards — active
+  campaigns as cards (image, title, body, CTA), impression + click tracking,
+  dismiss. (`/api/marketing` get_active / track / dismiss; partner_token or
+  staff Bearer.)
+
 ## Phase 3 — Chat 2.0 ⬜
 - ⬜ Group chats (create/list/thread/manage)
 - ⬜ Reactions + typing indicators + presence/status

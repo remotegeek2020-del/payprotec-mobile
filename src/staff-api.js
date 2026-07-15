@@ -112,6 +112,21 @@ export const StaffAuth = {
   },
 };
 
+// ── MARKETING / ANNOUNCEMENTS (api/marketing.js) ──────────────────────────────
+// Staff authenticate via the Bearer session (validateStaff). Same shape as the
+// partner Marketing module.
+export const StaffMarketing = {
+  getActive() {
+    return staffRequest('/api/marketing', { action: 'get_active' });
+  },
+  track(campaign_id, event_type, variant, target) {
+    return staffRequest('/api/marketing', { action: 'track', campaign_id, event_type, variant, target });
+  },
+  dismiss(campaign_id) {
+    return staffRequest('/api/marketing', { action: 'dismiss', campaign_id });
+  },
+};
+
 // ── EQUIPMENT LOOKUP (api/equipments.js) ──────────────────────────────────────
 export const StaffEquipment = {
   // Serial/barcode lookup — reuses the inventory list search.

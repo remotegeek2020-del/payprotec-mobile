@@ -4,9 +4,10 @@ import {
   ActivityIndicator, RefreshControl, Modal,
 } from 'react-native';
 import { COLORS } from '../config';
-import { Dashboard, Notifications } from '../api';
+import { Dashboard, Notifications, Marketing } from '../api';
 import { Storage } from '../storage';
 import { withCache, OfflineBanner } from '../offline';
+import AnnouncementCards from '../components/AnnouncementCards';
 
 function fmt(n) {
   if (n == null || n === '') return '—';
@@ -125,6 +126,8 @@ export default function DashboardScreen({ navigation, person }) {
       </View>
 
       {offline && <OfflineBanner cachedAt={cachedAt} />}
+
+      <AnnouncementCards api={Marketing} />
 
       {loading && !refreshing
         ? <ActivityIndicator color={COLORS.primary} style={{ margin: 32 }} />

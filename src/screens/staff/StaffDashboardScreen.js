@@ -4,7 +4,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { COLORS } from '../../config';
-import { staffRequest } from '../../staff-api';
+import { staffRequest, StaffMarketing } from '../../staff-api';
+import AnnouncementCards from '../../components/AnnouncementCards';
 
 // ── API (api/admin-dashboard.js) ──────────────────────────────────────────────
 const Api = {
@@ -142,6 +143,8 @@ export default function StaffDashboardScreen({ navigation, user }) {
       {/* Greeting */}
       <Text style={s.greeting}>{greeting}, {firstName} 👋</Text>
       <Text style={s.subGreeting}>Here's what's happening today</Text>
+
+      <AnnouncementCards api={StaffMarketing} />
 
       {loading ? (
         <ActivityIndicator color={COLORS.primary} size="large" style={{ marginTop: 40 }} />

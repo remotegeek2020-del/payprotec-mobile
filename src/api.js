@@ -212,6 +212,26 @@ export const SubPartners = {
   },
 };
 
+// ── MARKETING / ANNOUNCEMENTS (api/marketing.js) ──────────────────────────────
+// Viewer actions authenticate with `partner_token` in the body (NOT the generic
+// `token`) — matches resolveViewer() on the backend. Response: { success, data:[
+//   { id, title, body_text, image_url, content_type, cta_enabled, cta_label,
+//     cta_url, hotspots[], priority, display_mode, reshow_minutes, variant } ] }
+export const Marketing = {
+  async getActive() {
+    const partner_token = await Storage.get('partner_session_token');
+    return request('/api/marketing', { action: 'get_active', partner_token }, { auth: false });
+  },
+  async track(campaign_id, event_type, variant, target) {
+    const partner_token = await Storage.get('partner_session_token');
+    return request('/api/marketing', { action: 'track', campaign_id, event_type, variant, target, partner_token }, { auth: false });
+  },
+  async dismiss(campaign_id) {
+    const partner_token = await Storage.get('partner_session_token');
+    return request('/api/marketing', { action: 'dismiss', campaign_id, partner_token }, { auth: false });
+  },
+};
+
 // ── PRIME49 & RESIDUALS (api/partner-data.js) ─────────────────────────────────
 export const Prime49 = {
   // { success, data: { rows[], total_payout, total_volume, merchant_count, has_prime49 } }
